@@ -142,7 +142,7 @@ export default function UploadPage() {
             uploadDate: new Date().toISOString(),
         };
 
-        addUploadedFile(newFile);
+        await addUploadedFile(newFile);
         setIsDialogOpen(false);
 
         try {
@@ -163,9 +163,9 @@ export default function UploadPage() {
             }
 
             if (items) {
-                const success = savePortfolio(items, broker, owner);
+                const success = await savePortfolio(items, broker, owner);
                 if (success) {
-                    updateUploadedFileStatus(newFileId, "completed");
+                    await updateUploadedFileStatus(newFileId, "completed");
                 } else {
                     throw new Error("Failed to save data");
                 }
@@ -175,7 +175,7 @@ export default function UploadPage() {
 
         } catch (error) {
             console.error("Upload processing failed:", error);
-            updateUploadedFileStatus(newFileId, "failed");
+            await updateUploadedFileStatus(newFileId, "failed");
         }
 
         setPendingFile(null);
@@ -191,7 +191,7 @@ export default function UploadPage() {
         setConversionRate(90.27);
     }, []);
 
-    const handleManualSubmit = useCallback(() => {
+    const handleManualSubmit = useCallback(async () => {
         const amount = parseFloat(manualAmount);
         if (isNaN(amount) || amount <= 0) return;
 
@@ -219,7 +219,7 @@ export default function UploadPage() {
 
         const newItems = [...updatedItems, newItem];
 
-        savePortfolio(newItems, "Manual", "Self");
+        await savePortfolio(newItems, "Manual", "Self");
 
         setIsManualDialogOpen(false);
         setManualAmount("");
@@ -236,10 +236,10 @@ export default function UploadPage() {
         setIsManualDialogOpen(true);
     };
 
-    const handleDeleteManualAsset = (isin: string) => {
+    const handleDeleteManualAsset = async (isin: string) => {
         const existingManualItems = data?.items.filter(i => i.source === "Manual") || [];
         const newItems = existingManualItems.filter(i => i.isin !== isin);
-        savePortfolio(newItems, "Manual", "Self");
+        await savePortfolio(newItems, "Manual", "Self");
     };
 
     return (

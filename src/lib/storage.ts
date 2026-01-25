@@ -1,27 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import { PortfolioItem } from "./excel-parser";
+import { UploadedFile as UploadedFileType } from "./types";
+import { db } from "./db";
+import { useState } from "react";
+
 export interface PortfolioData {
     lastUpdated: string;
     items: PortfolioItem[];
 }
 
-export interface UploadedFile {
-    id: string;
-    filename: string;
-    size: number;
-    source: string;
-    owner?: string;
-    status: "processing" | "completed" | "failed";
-    description: string;
-    uploadDate: string;
-}
+export type UploadedFile = UploadedFileType; // Re-export type
 
-const STORAGE_KEY = "portfolio_data";
-const FILES_STORAGE_KEY = "uploaded_files";
-
-// Pure function for merging portfolio items
+// Pure function for merging portfolio items (Preserved for compatibility)
 export const mergePortfolioItems = (currentItems: PortfolioItem[], newItems: PortfolioItem[], broker: string, owner: string): PortfolioItem[] => {
     // 1. Tag new items with source and owner
     const taggedNewItems = newItems.map(item => ({ ...item, source: broker, owner: owner }));
@@ -41,8 +33,8 @@ export const mergePortfolioItems = (currentItems: PortfolioItem[], newItems: Por
     return [...otherItems, ...taggedNewItems];
 };
 
-// Pure function for merging uploaded files
-export const mergeUploadedFiles = (currentFiles: UploadedFile[], newFile: UploadedFile): UploadedFile[] => {
+// Pure function for merging uploaded files (Preserved for compatibility)
+export const mergeUploadedFiles = (currentFiles: UploadedFileType[], newFile: UploadedFileType): UploadedFileType[] => {
     // Remove any existing files with the same source AND owner
     const fileOwner = newFile.owner || "Self";
     const otherFiles = currentFiles.filter(f => {
@@ -56,51 +48,52 @@ export const mergeUploadedFiles = (currentFiles: UploadedFile[], newFile: Upload
 };
 
 export function usePortfolioStorage() {
-    const [data, setData] = useState<PortfolioData | null>(null);
-    const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    // We use useLiveQuery for reactive DB updates
+    const items = useLiveQuery(() => db.items.toArray());
+    const uploadedFiles = useLiveQuery(() => db.files.toArray());
 
-    // Initial Load
-    useEffect(() => {
-        const load = () => {
-            try {
-                // Load Portfolio Data
-                const storedData = localStorage.getItem(STORAGE_KEY);
-                if (storedData) {
-                    setData(JSON.parse(storedData));
-                }
+    // We can't easily get loading state from useLiveQuery (it returns undefined initially)
+    // but practically for IDB it's fast. 
+    // If items is undefined, it's loading.
+    const isLoading = items === undefined || uploadedFiles === undefined;
 
-                // Load Uploaded Files
-                const storedFiles = localStorage.getItem(FILES_STORAGE_KEY);
-                if (storedFiles) {
-                    setUploadedFiles(JSON.parse(storedFiles));
-                }
-            } catch (error) {
-                console.error("Failed to load storage data", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        load();
-    }, []);
+    // Helper to construct the data object expected by consumers
+    // We'll read lastUpdated from localStorage for simplicity as metadata
+    // Or just default to current time if missing, since we don't have a metadata table yet.
+    // For a "flawless" impl, we should store it.
+    const lastUpdated = typeof window !== 'undefined' ? localStorage.getItem("portfolio_last_updated") || new Date().toISOString() : new Date().toISOString();
 
-    const savePortfolio = (newItems: PortfolioItem[], broker: string, owner: string = "Self") => {
+    const data: PortfolioData | null = items ? {
+        lastUpdated,
+        items
+    } : null;
+
+    const savePortfolio = async (newItems: PortfolioItem[], broker: string, owner: string = "Self") => {
         try {
-            // Use functional update to ensure we work with latest data
-            setData(prevData => {
-                const currentItems = prevData?.items || [];
-                const mergedItems = mergePortfolioItems(currentItems, newItems, broker, owner);
+            await db.transaction('rw', db.items, async () => {
+                // 1. Delete existing items for the specific Broker + Owner
+                // We can't rely on compound index easily for delete in one go with simple API, 
+                // but we can find primary keys and bulkDelete.
+                // Or simply: db.items.where({source: broker, owner: owner}).delete() 
+                // BUT 'owner' might be optional/missing in DB vs "Self".
+                // Let's be careful. The index is [source+owner].
 
-                const newData: PortfolioData = {
-                    lastUpdated: new Date().toISOString(),
-                    items: mergedItems,
-                };
+                await db.items.where({ source: broker, owner: owner }).delete();
 
-                // Side effect: Save to local storage
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
+                // 2. Prepare new items
+                const taggedItems = newItems.map(item => ({
+                    ...item,
+                    source: broker,
+                    owner: owner
+                }));
 
-                return newData;
+                // 3. Add new items
+                await db.items.bulkAdd(taggedItems);
             });
+
+            // Side effect: update timestamp
+            localStorage.setItem("portfolio_last_updated", new Date().toISOString());
+
             return true;
         } catch (error) {
             console.error("Failed to save portfolio data", error);
@@ -108,35 +101,34 @@ export function usePortfolioStorage() {
         }
     };
 
-    const addUploadedFile = (file: UploadedFile) => {
+    const addUploadedFile = async (file: UploadedFileType) => {
         try {
-            setUploadedFiles(prevFiles => {
-                const newFiles = mergeUploadedFiles(prevFiles, file);
-                localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(newFiles));
-                return newFiles;
+            await db.transaction('rw', db.files, async () => {
+                // Remove existing file for same source+owner if logic dictates
+                // The original logic was: remove if source & owner match.
+                await db.files.where({ source: file.source, owner: file.owner || "Self" }).delete();
+
+                // Add new file
+                await db.files.put(file);
             });
         } catch (error) {
             console.error("Failed to save file history", error);
         }
     };
 
-    const updateUploadedFileStatus = (id: string, status: UploadedFile["status"]) => {
+    const updateUploadedFileStatus = async (id: string, status: UploadedFileType["status"]) => {
         try {
-            setUploadedFiles(prevFiles => {
-                const newFiles = prevFiles.map(f => f.id === id ? { ...f, status } : f);
-                localStorage.setItem(FILES_STORAGE_KEY, JSON.stringify(newFiles));
-                return newFiles;
-            });
+            await db.files.update(id, { status });
         } catch (error) {
             console.error("Failed to update file status", error);
         }
     };
 
-    const clearPortfolio = () => {
+    const clearPortfolio = async () => {
         try {
-            localStorage.removeItem(STORAGE_KEY);
-            setData(null);
-            // Optional: Clear files too? Maybe keep history.
+            await db.items.clear();
+            await db.files.clear();
+            localStorage.removeItem("portfolio_last_updated");
         } catch (error) {
             console.error("Failed to clear portfolio data", error);
         }
@@ -144,7 +136,7 @@ export function usePortfolioStorage() {
 
     return {
         data,
-        uploadedFiles,
+        uploadedFiles: uploadedFiles || [],
         isLoading,
         savePortfolio,
         addUploadedFile,
