@@ -491,7 +491,7 @@ export function DashboardView({ items, isLoading, title, lastUpdated, showCountr
                             <TableHeader>
                                 <TableRow className="border-border/50 hover:bg-transparent">
                                     <TableHead>
-                                        <Button variant="ghost" onClick={() => handleSort("symbol")} className="h-8 p-0 font-semibold hover:bg-transparent">
+                                        <Button variant="ghost" onClick={() => handleSort("symbol")} className="h-8 p-0 font-semibold hover:bg-transparent" data-testid="sort-symbol">
                                             Symbol <SortIcon columnKey="symbol" />
                                         </Button>
                                     </TableHead>
@@ -538,7 +538,7 @@ export function DashboardView({ items, isLoading, title, lastUpdated, showCountr
                                     const portfolioPercent = totalCurrentValue > 0 ? (stock.currentValue / totalCurrentValue) * 100 : 0;
 
                                     return (
-                                        <TableRow key={stock.symbol} className="border-border/50">
+                                        <TableRow key={stock.symbol} className="border-border/50" data-testid="stock-row">
                                             <TableCell className="font-mono font-semibold text-primary">
                                                 {stock.symbol}
                                             </TableCell>

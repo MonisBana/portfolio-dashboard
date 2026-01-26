@@ -279,6 +279,7 @@ export default function UploadPage() {
                             className="hidden"
                             onChange={handleFileInputChange}
                             accept=".csv,.xlsx,.xls,.json,.pdf"
+                            data-testid="file-upload-input"
                         />
                         <div
                             className={`rounded-full p-4 transition-colors ${isDragOver ? "bg-primary/20" : "bg-muted/50"
@@ -314,7 +315,7 @@ export default function UploadPage() {
                         setManualAmount("");
                         setManualName("");
                         setIsManualDialogOpen(true);
-                    }} variant="outline" size="sm" className="gap-2">
+                    }} variant="outline" size="sm" className="gap-2" data-testid="add-manual-asset-btn">
                         <Banknote className="h-4 w-4" />
                         Add Asset
                     </Button>
@@ -457,7 +458,7 @@ export default function UploadPage() {
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Broker / Source</label>
                             <Select value={broker} onValueChange={setBroker}>
-                                <SelectTrigger>
+                                <SelectTrigger data-testid="broker-select-trigger">
                                     <SelectValue placeholder="Select broker" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -476,6 +477,7 @@ export default function UploadPage() {
                                 value={owner}
                                 onChange={(e) => setOwner(e.target.value)}
                                 placeholder="e.g. Self, Spouse"
+                                data-testid="owner-input"
                             />
                         </div>
 
@@ -500,7 +502,7 @@ export default function UploadPage() {
                         <Button variant="outline" onClick={handleCancel}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSubmit} disabled={!broker}>
+                        <Button onClick={handleSubmit} disabled={!broker} data-testid="upload-submit-btn">
                             Upload
                         </Button>
                     </DialogFooter>
@@ -520,7 +522,7 @@ export default function UploadPage() {
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Asset Type</label>
                             <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
-                                <SelectTrigger>
+                                <SelectTrigger data-testid="manual-type-select">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -539,6 +541,7 @@ export default function UploadPage() {
                                     value={manualAmount}
                                     onChange={(e) => setManualAmount(e.target.value)}
                                     placeholder="0.00"
+                                    data-testid="manual-amount-input"
                                 />
                             </div>
                         </div>
@@ -556,7 +559,7 @@ export default function UploadPage() {
                         <Button variant="outline" onClick={() => setIsManualDialogOpen(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleManualSubmit} disabled={!manualAmount}>
+                        <Button onClick={handleManualSubmit} disabled={!manualAmount} data-testid="manual-submit-btn">
                             {editingAssetIsin ? "Save Changes" : "Add Asset"}
                         </Button>
                     </DialogFooter>
