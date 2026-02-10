@@ -4,6 +4,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { ChatProvider } from "@/components/chat/ChatProvider";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,17 +38,20 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
-                <SidebarTrigger className="-ml-1" />
-              </header>
-              <main className="flex-1 overflow-auto p-6">
-                {children}
-              </main>
-            </SidebarInset>
-          </SidebarProvider>
+          <ChatProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <SidebarInset>
+                <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
+                  <SidebarTrigger className="-ml-1" />
+                </header>
+                <main className="flex-1 overflow-auto p-6">
+                  {children}
+                </main>
+              </SidebarInset>
+            </SidebarProvider>
+            <ChatWidget />
+          </ChatProvider>
         </ThemeProvider>
       </body>
     </html>

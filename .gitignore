@@ -47,4 +47,6 @@ src/sample_data
 eslint_*.txt
 eslint_*.json
 
-
+server/node_modules
+server/dist
+server/.env
