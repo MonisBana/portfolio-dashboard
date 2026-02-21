@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Pie, PieChart, Cell } from "recharts";
 import { mergePortfolioItems } from "@/lib/utils";
 import { PortfolioItem } from "@/lib/excel-parser";
+import * as XLSX from "xlsx";
 
 import {
   Card,
@@ -36,6 +37,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -56,6 +58,22 @@ export function DashboardView({
   lastUpdated,
   showCountryChart = true,
 }: DashboardViewProps) {
+  // CSV download handler
+  const handleDownloadCSV = useCallback(() => {
+    const merged = mergePortfolioItems(items);
+    if (merged.length === 0) return;
+    const ws = XLSX.utils.json_to_sheet(merged);
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "holdings_export.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [items]);
   // State for dynamic charts
   const [sectorData, setSectorData] = useState<any[]>([]);
   const [sectorConfig, setSectorConfig] = useState<ChartConfig>({});
@@ -599,16 +617,29 @@ export function DashboardView({
           </CardTitle>
           <div className="flex justify-between">
             <CardDescription>Your current portfolio holdings</CardDescription>
-            <div className="flex items-center w-full max-w-md bg-transparent border border-input rounded-md px-[0.75em] shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
-              <input
-                type="text"
-                className="flex h-[2.25rem] w-full bg-transparent py-[0.25em] text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search..."
-                data-testid="search-term-input"
-              />
-              <Search className="w-[1.2em] h-[1.2em] ml-[0.5em] shrink-0 text-muted-foreground" />
+            <div className="flex gap-2">
+
+              <div className="flex items-center w-full max-w-md bg-transparent border border-input rounded-md px-[0.75em] shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
+                <input
+                  type="text"
+                  className="flex h-[2.25rem] w-full bg-transparent py-[0.25em] text-sm placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search..."
+                  data-testid="search-term-input"
+                />
+                <Search className="w-[1.2em] h-[1.2em] ml-[0.5em] shrink-0 text-muted-foreground" />
+              </div>
+              <Button
+                variant="outline"
+                size="lg"
+                className="gap-1.5 shrink-0"
+                onClick={handleDownloadCSV}
+                disabled={!items || items.length === 0}
+              >
+                <Download className="h-4 w-4" />
+                CSV
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -731,9 +762,8 @@ export function DashboardView({
                       </TableCell>
                       <TableCell className="text-right">
                         <span
-                          className={`inline-flex items-center gap-1 font-mono text-xs ${
-                            stock.pnl >= 0 ? "text-emerald-500" : "text-red-500"
-                          }`}
+                          className={`inline-flex items-center gap-1 font-mono text-xs ${stock.pnl >= 0 ? "text-emerald-500" : "text-red-500"
+                            }`}
                         >
                           {stock.pnl >= 0 ? "+" : ""}
                           {stock.pnl.toLocaleString("en-IN", {
@@ -745,11 +775,10 @@ export function DashboardView({
                       </TableCell>
                       <TableCell className="text-right">
                         <span
-                          className={`inline-flex items-center gap-1 font-mono text-xs ${
-                            stock.returnsPercent >= 0
-                              ? "text-emerald-500"
-                              : "text-red-500"
-                          }`}
+                          className={`inline-flex items-center gap-1 font-mono text-xs ${stock.returnsPercent >= 0
+                            ? "text-emerald-500"
+                            : "text-red-500"
+                            }`}
                         >
                           {stock.returnsPercent >= 0 ? "+" : ""}
                           {stock.returnsPercent.toFixed(2)}%
