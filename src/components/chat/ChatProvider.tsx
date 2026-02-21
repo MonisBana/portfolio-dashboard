@@ -1,7 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { HashbrownProvider } from "@hashbrownai/react";
+import { createClient } from "@/lib/supabase/client";
 
 export type ProviderName = "google" | "ollama";
 
@@ -48,6 +49,20 @@ export const useChatConfig = () => {
 export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
     const [provider, setProvider] = useState<ProviderName>("google");
     const [model, setModel] = useState<string>(PROVIDER_MODELS.google[0].id);
+    const [token, setToken] = useState<string>("");
+    const supabase = createClient();
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data }) => {
+            setToken(data.session?.access_token || "");
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            setToken(session?.access_token || "");
+        });
+
+        return () => subscription.unsubscribe();
+    }, [supabase.auth]);
 
     const handleSetProvider = (p: ProviderName) => {
         setProvider(p);
@@ -63,7 +78,16 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
                 setModel,
             }}
         >
-            <HashbrownProvider url={BACKEND_URLS[provider]}>
+            <HashbrownProvider
+                url={BACKEND_URLS[provider]}
+                middleware={token ? [(req) => ({
+                    ...req,
+                    headers: {
+                        ...req.headers,
+                        Authorization: `Bearer ${token}`
+                    }
+                })] : undefined}
+            >
                 {children}
             </HashbrownProvider>
         </ChatConfigContext.Provider>

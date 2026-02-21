@@ -3,6 +3,7 @@
 import { usePortfolioStorage } from "@/lib/storage";
 import { DashboardView } from "@/components/dashboard-view";
 import { useMemo } from "react";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
 export default function IndianStocksPage() {
     const { data, isLoading } = usePortfolioStorage();
@@ -16,12 +17,14 @@ export default function IndianStocksPage() {
     }, [data?.items]);
 
     return (
-        <DashboardView
-            items={indianItems}
-            isLoading={isLoading}
-            title="Indian Stocks"
-            lastUpdated={data?.lastUpdated}
-            showCountryChart={false}
-        />
+        <DashboardLayout>
+            <DashboardView
+                items={indianItems}
+                isLoading={isLoading}
+                title="Indian Stocks"
+                lastUpdated={data?.lastUpdated}
+                showCountryChart={false}
+            />
+        </DashboardLayout>
     );
 }
