@@ -180,9 +180,8 @@ export const parseVestedExcel = async (file: File, conversionRate: number): Prom
             try {
                 const data = e.target?.result;
                 const workbook = XLSX.read(data, { type: "array" });
-                // Vested usually has a sheet named "Trades" or "Holdings". The sample data shows "Trades".
-                // But let's be safe and pick the first sheet if "Trades" isn't found, or look for specific columns.
-                const sheetName = workbook.SheetNames.find(n => n === "Trades") || workbook.SheetNames[0];
+                // Vested usually has a sheet named "Holdings" or "Trades".
+                const sheetName = workbook.SheetNames.find(n => n === "Holdings") || workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
 
                 if (!worksheet) {
@@ -190,7 +189,6 @@ export const parseVestedExcel = async (file: File, conversionRate: number): Prom
                     return;
                 }
 
-                // Vested Format (based on sample)
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as (string | number | null)[][];
 
                 if (jsonData.length === 0) {
@@ -200,26 +198,40 @@ export const parseVestedExcel = async (file: File, conversionRate: number): Prom
 
                 const rows = jsonData.slice(1);
                 const headers = jsonData[0] as string[];
-                const nameIndex = headers.findIndex(h => h && h.toLowerCase().includes("name"));
-                const tickerIndex = headers.findIndex(h => h && h.toLowerCase().includes("symbol") || h && h.toLowerCase().includes("ticker")) || 1;
+
+                const nameIndex = headers.findIndex(h => h && typeof h === "string" && h.toLowerCase().includes("name"));
+                const tickerIndex = headers.findIndex(h => h && typeof h === "string" && (h.toLowerCase().includes("symbol") || h.toLowerCase().includes("ticker")));
+                const qtyIndex = headers.findIndex(h => h && typeof h === "string" && (h.toLowerCase().includes("shares held") || h.toLowerCase().includes("qty") || h.toLowerCase() === "quantity"));
+                const avgPriceIndex = headers.findIndex(h => h && typeof h === "string" && (h.toLowerCase().includes("average cost") || h.toLowerCase().includes("avg")));
+                const currentValueIndex = headers.findIndex(h => h && typeof h === "string" && h.toLowerCase().includes("current value"));
+                const pnlIndex = headers.findIndex(h => h && typeof h === "string" && (h.toLowerCase().includes("investment returns (usd)") || h.toLowerCase().includes("pnl") || h.toLowerCase() === "returns"));
 
                 const portfolioItems: PortfolioItem[] = [];
 
                 rows.forEach((row) => {
                     if (row.length < 2) return;
-                    const ticker = String(row[tickerIndex] || "");
+
+                    const tIdx = tickerIndex !== -1 ? tickerIndex : 1;
+                    const ticker = String(row[tIdx] || "");
                     const name = nameIndex !== -1 ? String(row[nameIndex] || "") : ticker;
 
                     if (!ticker && !name) return;
 
-                    const qty = Number(row[2]) || 0;
-                    const avgPriceUsd = Number(row[5]) || 0;
-                    const currentValueUsd = Number(row[4]) || 0;
-                    const pnlUsd = Number(row[7]) || 0;
+                    const qIdx = qtyIndex !== -1 ? qtyIndex : 2;
+                    const qty = Number(row[qIdx]) || 0;
+
+                    const pIdx = avgPriceIndex !== -1 ? avgPriceIndex : 5;
+                    const avgPriceUsd = Number(row[pIdx]) || 0;
+
+                    const cvIdx = currentValueIndex !== -1 ? currentValueIndex : 4;
+                    const currentValueUsd = Number(row[cvIdx]) || 0;
+
+                    const pnlIdx = pnlIndex !== -1 ? pnlIndex : 7;
+                    const pnlUsd = Number(row[pnlIdx]) || 0;
 
                     const item: PortfolioItem = {
-                        symbol: name || ticker, // Use name for symbol as requested
-                        isin: `US:${ticker || name}`, // Pseudo-ISIN for US stocks
+                        symbol: name || ticker,
+                        isin: `US:${ticker || name}`,
                         sector: name.includes("ETF") ? "US ETF" : "US Equity",
                         instrumentType: name.includes("ETF") ? "US ETF" : "US Stocks",
                         quantity: qty,

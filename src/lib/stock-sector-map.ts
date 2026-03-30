@@ -502,7 +502,7 @@ export const STOCK_SECTOR_MAP_ISIN: Record<string, string> = {
     "INE738I01010": "IT",
     "INE596I01020": "FINANCIAL SERVICES",
     "INE561D01025": "MANUFACTURING",
-
+    "INF277KA1976": "Gold ETF"
 };
 
 export function getSectorForISIN(isin: string): string {

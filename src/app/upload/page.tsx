@@ -77,7 +77,7 @@ export default function UploadPage() {
     const [pendingFile, setPendingFile] = useState<File | null>(null);
     const [broker, setBroker] = useState<string>("");
     const [owner, setOwner] = useState<string>("Self");
-    const [conversionRate, setConversionRate] = useState<number>(90.27);
+    const [conversionRate, setConversionRate] = useState<number>(94.60);
 
     // Manual Asset State
     const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
@@ -189,7 +189,7 @@ export default function UploadPage() {
         setPendingFile(null);
         setBroker("");
         setOwner("Self");
-        setConversionRate(90.27);
+        setConversionRate(94.60);
     }, []);
 
     const handleDeleteFile = useCallback(async (id: string, source: string, owner?: string) => {
@@ -265,8 +265,8 @@ export default function UploadPage() {
                             Upload and manage your data files
                         </p>
                     </div>
-                    <Button 
-                        variant="destructive" 
+                    <Button
+                        variant="destructive"
                         onClick={handleClearAllData}
                         className="gap-2"
                         data-testid="clear-all-data-btn"
