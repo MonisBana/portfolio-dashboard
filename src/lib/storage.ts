@@ -124,6 +124,18 @@ export function usePortfolioStorage() {
         }
     };
 
+    const removeUploadedFile = async (id: string, source: string, owner: string = "Self") => {
+        try {
+            await db.transaction('rw', db.items, db.files, async () => {
+                await db.files.delete(id);
+                await db.items.where({ source, owner }).delete();
+            });
+            localStorage.setItem("portfolio_last_updated", new Date().toISOString());
+        } catch (error) {
+            console.error("Failed to remove file and associated data", error);
+        }
+    };
+
     const clearPortfolio = async () => {
         try {
             await db.items.clear();
@@ -141,6 +153,7 @@ export function usePortfolioStorage() {
         savePortfolio,
         addUploadedFile,
         updateUploadedFileStatus,
+        removeUploadedFile,
         clearPortfolio,
     };
 }

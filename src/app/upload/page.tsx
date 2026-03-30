@@ -72,7 +72,7 @@ function getStatusText(status: UploadedFile["status"]) {
 }
 
 export default function UploadPage() {
-    const { data, savePortfolio, uploadedFiles, addUploadedFile, updateUploadedFileStatus } = usePortfolioStorage();
+    const { data, savePortfolio, uploadedFiles, addUploadedFile, updateUploadedFileStatus, removeUploadedFile, clearPortfolio } = usePortfolioStorage();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [pendingFile, setPendingFile] = useState<File | null>(null);
     const [broker, setBroker] = useState<string>("");
@@ -192,6 +192,18 @@ export default function UploadPage() {
         setConversionRate(90.27);
     }, []);
 
+    const handleDeleteFile = useCallback(async (id: string, source: string, owner?: string) => {
+        if (confirm("Are you sure you want to delete this file and its associated portfolio items?")) {
+            await removeUploadedFile(id, source, owner || "Self");
+        }
+    }, [removeUploadedFile]);
+
+    const handleClearAllData = useCallback(async () => {
+        if (confirm("Are you sure you want to clear ALL portfolio data? This action cannot be undone.")) {
+            await clearPortfolio();
+        }
+    }, [clearPortfolio]);
+
     const handleManualSubmit = useCallback(async () => {
         const amount = parseFloat(manualAmount);
         if (isNaN(amount) || amount <= 0) return;
@@ -246,11 +258,22 @@ export default function UploadPage() {
     return (
         <DashboardLayout>
             <div className="space-y-6">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Upload</h1>
-                    <p className="text-muted-foreground mt-1">
-                        Upload and manage your data files
-                    </p>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">Upload</h1>
+                        <p className="text-muted-foreground mt-1">
+                            Upload and manage your data files
+                        </p>
+                    </div>
+                    <Button 
+                        variant="destructive" 
+                        onClick={handleClearAllData}
+                        className="gap-2"
+                        data-testid="clear-all-data-btn"
+                    >
+                        <Trash2 className="h-4 w-4" />
+                        Clear All Data
+                    </Button>
                 </div>
 
                 {/* Drag & Drop Zone */}
@@ -407,6 +430,7 @@ export default function UploadPage() {
                                         <TableHead className="font-semibold">Source</TableHead>
                                         <TableHead className="font-semibold">Owner</TableHead>
                                         <TableHead className="font-semibold">Status</TableHead>
+                                        <TableHead className="w-[100px] text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -436,6 +460,16 @@ export default function UploadPage() {
                                                     {getStatusIcon(file.status)}
                                                     {getStatusText(file.status)}
                                                 </div>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                    onClick={() => handleDeleteFile(file.id, file.source, file.owner)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     ))}
