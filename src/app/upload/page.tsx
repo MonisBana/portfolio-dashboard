@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { UploadCloud, FileText, CheckCircle2, Clock, AlertCircle, Banknote, Trash2, Pencil } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { UploadCloud, FileText, CheckCircle2, Clock, AlertCircle, Banknote, Trash2, Pencil, RefreshCw, Loader2 } from "lucide-react";
 import { parseZerodhaExcel, PortfolioItem } from "@/lib/excel-parser";
 import { usePortfolioStorage, UploadedFile } from "@/lib/storage";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { zerodhaClient } from "@/lib/api/zerodha-client";
+import { growwClient } from "@/lib/api/groww-client";
+import { GrowwConnect } from "@/components/groww-connect";
+import { toast } from "sonner";
 
 import {
     Card,
@@ -85,6 +89,11 @@ export default function UploadPage() {
     const [manualAmount, setManualAmount] = useState<string>("");
     const [manualName, setManualName] = useState<string>("");
     const [editingAssetIsin, setEditingAssetIsin] = useState<string | null>(null); // Track if editing
+
+    // Zerodha API Sync State
+    const [zerodhaConnected, setZerodhaConnected] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -255,6 +264,98 @@ export default function UploadPage() {
         await savePortfolio(newItems, "Manual", "Self");
     };
 
+    const handleZerodhaConnect = async () => {
+        try {
+            const loginUrl = await zerodhaClient.getLoginUrl();
+            window.location.href = loginUrl;
+        } catch (error) {
+            toast.error("Failed to initiate Zerodha connection");
+        }
+    };
+
+    const handleZerodhaSync = async () => {
+        setIsSyncing(true);
+        try {
+            const holdings = await zerodhaClient.syncHoldings();
+
+            await savePortfolio(holdings, "Zerodha", owner);
+
+            await addUploadedFile({
+                id: Date.now().toString(),
+                filename: "Zerodha API Sync",
+                size: 0,
+                source: "Zerodha",
+                owner: owner,
+                status: "completed",
+                description: `API Sync - ${holdings.length} holdings`,
+                uploadDate: new Date().toISOString()
+            });
+
+            const syncTime = new Date().toISOString();
+            setLastSyncTime(syncTime);
+            localStorage.setItem("zerodha_last_sync", syncTime);
+            toast.success(`Synced ${holdings.length} holdings from Zerodha`);
+        } catch (error: any) {
+            if (error.message === 'TOKEN_EXPIRED') {
+                setZerodhaConnected(false);
+                toast.error("Session expired. Please reconnect to Zerodha.");
+            } else {
+                toast.error("Sync failed: " + error.message);
+            }
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleGrowwSyncSuccess = async () => {
+        try {
+            const status = await growwClient.getStatus();
+
+            for (const account of status.accounts) {
+                if (account.isConnected) {
+                    try {
+                        const holdings = await growwClient.syncHoldings(account.accountName as 'Self' | 'Wife');
+
+                        await savePortfolio(holdings, "Groww", account.accountName);
+
+                        await addUploadedFile({
+                            id: Date.now().toString() + account.accountName,
+                            filename: `Groww API Sync - ${account.accountName}`,
+                            size: 0,
+                            source: "Groww",
+                            owner: account.accountName,
+                            status: "completed",
+                            description: `API Sync - ${holdings.length} holdings`,
+                            uploadDate: new Date().toISOString()
+                        });
+                    } catch (error) {
+                        console.error(`Failed to sync ${account.accountName}:`, error);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Groww sync callback error:', error);
+        }
+    };
+
+    useEffect(() => {
+        zerodhaClient.getStatus()
+            .then(status => setZerodhaConnected(status.isConnected))
+            .catch(() => setZerodhaConnected(false));
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('zerodha_connected') === 'true') {
+            setZerodhaConnected(true);
+            toast.success("Successfully connected to Zerodha!");
+            window.history.replaceState({}, '', '/upload');
+        }
+
+        const savedSyncTime = localStorage.getItem("zerodha_last_sync");
+        if (savedSyncTime) {
+            setLastSyncTime(savedSyncTime);
+        }
+    }, []);
+
     return (
         <DashboardLayout>
             <div className="space-y-6">
@@ -404,6 +505,63 @@ export default function UploadPage() {
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Zerodha API Sync Card */}
+                <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <RefreshCw className="h-5 w-5" />
+                            Zerodha API Sync
+                        </CardTitle>
+                        <CardDescription>
+                            Sync holdings directly from your Zerodha account
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {!zerodhaConnected ? (
+                            <div className="space-y-2">
+                                <p className="text-sm text-muted-foreground">
+                                    Connect your Zerodha account to enable automatic syncing
+                                </p>
+                                <Button onClick={handleZerodhaConnect} className="w-full">
+                                    Connect to Zerodha
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2 text-sm text-emerald-600">
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    Connected to Zerodha
+                                </div>
+                                <Button
+                                    onClick={handleZerodhaSync}
+                                    disabled={isSyncing}
+                                    className="w-full"
+                                >
+                                    {isSyncing ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                            Syncing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                            Sync Now
+                                        </>
+                                    )}
+                                </Button>
+                                {lastSyncTime && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Last synced: {new Date(lastSyncTime).toLocaleString()}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Groww Integration */}
+                <GrowwConnect onSyncSuccess={handleGrowwSyncSuccess} />
 
                 {/* Uploaded Files Table */}
                 <Card className="bg-card/50 backdrop-blur-sm border-border/50">
