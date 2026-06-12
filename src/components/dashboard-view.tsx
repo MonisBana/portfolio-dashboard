@@ -242,8 +242,19 @@ export function DashboardView({
         (sum, item) => sum + item.currentValue,
         0,
       );
-      const tPnL = processedItems.reduce((sum, item) => sum + item.pnl, 0);
-      const tInv = tVal - tPnL;
+      const returnEligibleItems = processedItems.filter(
+        (item) =>
+          item.instrumentType !== "Cash" &&
+          item.instrumentType !== "Fixed Deposit",
+      );
+      const tPnL = returnEligibleItems.reduce(
+        (sum, item) => sum + item.pnl,
+        0,
+      );
+      const tInv = returnEligibleItems.reduce(
+        (sum, item) => sum + (item.currentValue - item.pnl),
+        0,
+      );
       const tRet = tInv !== 0 ? (tPnL / tInv) * 100 : 0;
 
       // 2. Sort
