@@ -8,6 +8,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { zerodhaClient } from "@/lib/api/zerodha-client";
 import { growwClient } from "@/lib/api/groww-client";
 import { GrowwConnect } from "@/components/groww-connect";
+import { IndMoneyConnect } from "@/components/indmoney-connect";
 import { toast } from "sonner";
 
 import {
@@ -307,6 +308,25 @@ export default function UploadPage() {
         }
     };
 
+    const handleIndMoneySyncSuccess = async (holdings: PortfolioItem[], accountName: string) => {
+        try {
+            await savePortfolio(holdings, "IndMoney", accountName);
+
+            await addUploadedFile({
+                id: Date.now().toString() + accountName,
+                filename: `INDMoney API Sync - ${accountName}`,
+                size: 0,
+                source: "IndMoney",
+                owner: accountName,
+                status: "completed",
+                description: `API Sync - ${holdings.length} holdings`,
+                uploadDate: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('INDMoney sync callback error:', error);
+        }
+    };
+
     const handleGrowwSyncSuccess = async () => {
         try {
             const status = await growwClient.getStatus();
@@ -562,6 +582,9 @@ export default function UploadPage() {
 
                 {/* Groww Integration */}
                 <GrowwConnect onSyncSuccess={handleGrowwSyncSuccess} />
+
+                {/* INDMoney Integration */}
+                <IndMoneyConnect onSyncSuccess={handleIndMoneySyncSuccess} />
 
                 {/* Uploaded Files Table */}
                 <Card className="bg-card/50 backdrop-blur-sm border-border/50">
