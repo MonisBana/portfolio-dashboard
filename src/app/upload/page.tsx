@@ -9,6 +9,7 @@ import { zerodhaClient } from "@/lib/api/zerodha-client";
 import { growwClient } from "@/lib/api/groww-client";
 import { GrowwConnect } from "@/components/groww-connect";
 import { IndMoneyConnect } from "@/components/indmoney-connect";
+import { VestedConnect } from "@/components/vested-connect";
 import { toast } from "sonner";
 
 import {
@@ -327,6 +328,25 @@ export default function UploadPage() {
         }
     };
 
+    const handleVestedSyncSuccess = async (holdings: PortfolioItem[]) => {
+        try {
+            await savePortfolio(holdings, "Vested", "Self");
+
+            await addUploadedFile({
+                id: Date.now().toString() + 'Vested',
+                filename: `Vested API Sync`,
+                size: 0,
+                source: "Vested",
+                owner: "Self",
+                status: "completed",
+                description: `API Sync - ${holdings.length} holdings`,
+                uploadDate: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('Vested sync callback error:', error);
+        }
+    };
+
     const handleGrowwSyncSuccess = async () => {
         try {
             const status = await growwClient.getStatus();
@@ -582,6 +602,9 @@ export default function UploadPage() {
 
                 {/* Groww Integration */}
                 <GrowwConnect onSyncSuccess={handleGrowwSyncSuccess} />
+
+                {/* Vested Integration */}
+                <VestedConnect onSyncSuccess={handleVestedSyncSuccess} />
 
                 {/* INDMoney Integration */}
                 <IndMoneyConnect onSyncSuccess={handleIndMoneySyncSuccess} />

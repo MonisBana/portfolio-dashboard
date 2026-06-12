@@ -4,9 +4,10 @@ import { AuthModule } from './auth/auth.module';
 import { ZerodhaModule } from './zerodha/zerodha.module';
 import { GrowwModule } from './groww/groww.module';
 import { IndMoneyModule } from './indmoney/indmoney.module';
+import { VestedModule } from './vested/vested.module';
 
 @Module({
-    imports: [AuthModule, ZerodhaModule, GrowwModule, IndMoneyModule],
+    imports: [AuthModule, ZerodhaModule, GrowwModule, IndMoneyModule, VestedModule],
     controllers: [AppController],
     providers: [],
 })
