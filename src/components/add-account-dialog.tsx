@@ -117,6 +117,7 @@ export function AddAccountDialog({
 
     useEffect(() => {
         if (open) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the form when the dialog opens
             setBroker(initialBroker);
             setMember(initialMember);
         }
@@ -124,6 +125,7 @@ export function AddAccountDialog({
 
     useEffect(() => {
         if (members.length > 0 && !members.includes(member)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- keep the selection valid when members change
             setMember(members[0]);
         }
     }, [members, member]);

@@ -152,12 +152,14 @@ export default function UploadPage() {
     useEffect(() => {
         const savedRate = localStorage.getItem("portfolio_usd_inr_rate");
         if (savedRate) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate a browser-only preference after mount
             setUsdInrRate(parseFloat(savedRate));
         }
     }, []);
 
     useEffect(() => {
         if (familyNames.length > 0 && !familyNames.includes(fileOwner)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- keep the selected owner valid when members change
             setFileOwner(familyNames[0]);
         }
         if (familyNames.length > 0 && !familyNames.includes(manualOwner)) {
@@ -265,6 +267,7 @@ export default function UploadPage() {
             sessionStorage.removeItem('zerodha_pending_member');
             window.history.replaceState({}, '', '/upload');
             toast.success(`Zerodha connected for ${member}`);
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- refresh connection state after the OAuth redirect
             loadConnections().then(() => {
                 void syncConnection({ broker: 'Zerodha', member, isConnected: true });
             });
@@ -402,7 +405,7 @@ export default function UploadPage() {
                 items = await parseVestedExcel(pendingFile, conversionRate);
             } else if (fileBroker === "IndMoney") {
                 const { parseIndMoneyExcel } = await import("@/lib/excel-parser");
-                items = await parseIndMoneyExcel(pendingFile, conversionRate);
+                items = await parseIndMoneyExcel(pendingFile);
             } else {
                 throw new Error("Unsupported broker selected");
             }

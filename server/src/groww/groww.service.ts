@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, InternalServerErrorException, Logger, BadRequestException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import YahooFinance from 'yahoo-finance2';
-import { PortfolioItem, GrowwAccount, GrowwAuthCredentials, GrowwHolding } from './interfaces/groww.interface';
+import { PortfolioItem, GrowwAccount, GrowwHolding } from './interfaces/groww.interface';
 
 @Injectable()
 export class GrowwService {
@@ -39,7 +39,6 @@ export class GrowwService {
             const checksum = this.generateChecksum(apiSecret, timestamp);
 
             this.logger.log(`Authenticating ${accountName} account with API Key...`);
-            this.logger.log(`Timestamp: ${timestamp}, Checksum: ${checksum.substring(0, 10)}...`);
 
             const response = await fetch(`${this.API_BASE}/token/api/access`, {
                 method: 'POST',
@@ -57,15 +56,14 @@ export class GrowwService {
             });
 
             const responseText = await response.text();
-            this.logger.log(`Response status: ${response.status}`);
-            this.logger.log(`Response body: ${responseText.substring(0, 200)}`);
+            this.logger.log(`Groww authentication response status: ${response.status}`);
 
             if (!response.ok) {
                 let errorMessage = 'Authentication failed';
                 try {
                     const error = JSON.parse(responseText);
                     errorMessage = error.message || error.error?.message || 'Authentication failed';
-                } catch (e) {
+                } catch {
                     errorMessage = `HTTP ${response.status}: ${response.statusText}`;
                 }
                 throw new Error(errorMessage);
@@ -77,7 +75,7 @@ export class GrowwService {
             const token = data.token || data.payload?.access_token || data.access_token;
 
             if (!token) {
-                this.logger.error('No token in response:', data);
+                this.logger.error(`No token in Groww authentication response for ${accountName}`);
                 throw new Error('Invalid response from Groww API - no token found');
             }
 
@@ -116,15 +114,14 @@ export class GrowwService {
             });
 
             const responseText = await response.text();
-            this.logger.log(`TOTP Response status: ${response.status}`);
-            this.logger.log(`TOTP Response body: ${responseText.substring(0, 200)}`);
+            this.logger.log(`Groww TOTP authentication response status: ${response.status}`);
 
             if (!response.ok) {
                 let errorMessage = 'Authentication failed';
                 try {
                     const error = JSON.parse(responseText);
                     errorMessage = error.message || error.error?.message || 'Authentication failed with TOTP';
-                } catch (e) {
+                } catch {
                     errorMessage = `HTTP ${response.status}: ${response.statusText}`;
                 }
                 throw new Error(errorMessage);
@@ -136,7 +133,7 @@ export class GrowwService {
             const token = data.token || data.payload?.access_token || data.access_token;
 
             if (!token) {
-                this.logger.error('No token in TOTP response:', data);
+                this.logger.error(`No token in Groww TOTP response for ${accountName}`);
                 throw new Error('Invalid response from Groww API - no token found');
             }
 
@@ -227,22 +224,21 @@ export class GrowwService {
             });
 
             const responseText = await response.text();
-            this.logger.log(`Holdings response status: ${response.status}`);
-            this.logger.log(`Holdings response body: ${responseText.substring(0, 500)}`);
+            this.logger.log(`Groww holdings response status: ${response.status}`);
 
             if (!response.ok) {
                 if (response.status === 401 || response.status === 403) {
                     this.clearToken(accountName);
                     throw new UnauthorizedException(`Session expired for ${accountName}. Please reconnect.`);
                 }
-                throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText}`);
+                throw new Error(`Groww holdings request failed with HTTP ${response.status}`);
             }
 
             const data = JSON.parse(responseText);
 
             if (data.status !== 'SUCCESS' || !data.payload?.holdings) {
-                this.logger.error('Invalid response structure:', data);
-                throw new Error(`Invalid response from Groww API: ${JSON.stringify(data)}`);
+                this.logger.error(`Unexpected Groww holdings response structure for ${accountName}`);
+                throw new Error('Invalid response from Groww API');
             }
 
             const holdings = data.payload.holdings;
@@ -267,7 +263,7 @@ export class GrowwService {
     async fetchAllHoldings(): Promise<PortfolioItem[]> {
         const allHoldings: PortfolioItem[] = [];
 
-        for (const [accountName, _] of this.accounts) {
+        for (const accountName of this.accounts.keys()) {
             if (this.isTokenValid(accountName)) {
                 try {
                     const holdings = await this.fetchHoldings(accountName);

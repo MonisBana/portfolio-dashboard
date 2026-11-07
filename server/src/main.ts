@@ -9,7 +9,7 @@ async function bootstrap() {
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
     });
-    await app.listen(3001);
+    await app.listen(3001, '127.0.0.1');
     console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

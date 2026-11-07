@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Res } from '@nestjs/common';
 import { Response } from 'express';
+import { Chat } from '@hashbrownai/core';
 import { HashbrownGoogle } from '@hashbrownai/google';
 import { HashbrownOllama } from '@hashbrownai/ollama';
 import * as dotenv from 'dotenv';
@@ -23,7 +24,7 @@ export class AppController {
      * pipes it through HashbrownGoogle.stream.text(), and streams the response.
      */
     @Post('google')
-    async chatGoogle(@Body() body: any, @Res() res: Response) {
+    async chatGoogle(@Body() body: Chat.Api.CompletionCreateParams, @Res() res: Response) {
         if (!this.googleApiKey) {
             return res
                 .status(500)
@@ -44,9 +45,14 @@ export class AppController {
             }
             res.end();
         } catch (error) {
-            console.error('Error calling Gemini via Hashbrown:', error);
+            console.error(
+                'Error calling Gemini via Hashbrown:',
+                error instanceof Error ? error.message : 'Unknown error',
+            );
             if (!res.headersSent) {
-                res.status(500).json({ error: error.message });
+                res.status(500).json({
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
             }
         }
     }
@@ -57,7 +63,7 @@ export class AppController {
      * pipes it through HashbrownOllama.stream.text(), and streams the response.
      */
     @Post('ollama')
-    async chatOllama(@Body() body: any, @Res() res: Response) {
+    async chatOllama(@Body() body: Chat.Api.CompletionCreateParams, @Res() res: Response) {
         try {
             const stream = HashbrownOllama.stream.text({
                 request: body,
@@ -71,9 +77,14 @@ export class AppController {
             }
             res.end();
         } catch (error) {
-            console.error('Error calling Ollama via Hashbrown:', error);
+            console.error(
+                'Error calling Ollama via Hashbrown:',
+                error instanceof Error ? error.message : 'Unknown error',
+            );
             if (!res.headersSent) {
-                res.status(500).json({ error: error.message });
+                res.status(500).json({
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
             }
         }
     }

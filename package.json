@@ -1,12 +1,35 @@
 {
   "name": "portfolio-dashboard",
   "version": "0.1.0",
-  "private": true,
+  "description": "A local-first dashboard for tracking Indian and US investment portfolios across brokers.",
+  "license": "MIT",
+  "author": "Monis Bana",
+  "keywords": [
+    "portfolio",
+    "investments",
+    "stocks",
+    "nextjs",
+    "nestjs",
+    "zerodha",
+    "groww",
+    "indmoney",
+    "vested"
+  ],
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "overrides": {
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.21"
+    }
+  },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
+    "start": "next start -H 127.0.0.1",
+    "lint": "eslint src server/src",
+    "lint:fix": "eslint src server/src --fix",
+    "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:e2e": "cypress run",
     "test:e2e:open": "cypress open"
@@ -27,24 +50,24 @@
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",
     "lucide-react": "^0.562.0",
-    "next": "16.1.1",
+    "next": "^16.4.5",
     "next-themes": "^0.4.6",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^30.0.0",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "cypress": "^15.9.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.1",
+    "eslint-config-next": "^16.4.5",
     "jest": "^30.2.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.6",

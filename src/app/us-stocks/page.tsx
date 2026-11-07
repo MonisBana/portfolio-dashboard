@@ -7,14 +7,15 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
 export default function UsStocksPage() {
     const { data, isLoading } = usePortfolioStorage();
+    const items = data?.items;
 
     const usItems = useMemo(() => {
-        if (!data?.items) return [];
-        return data.items.filter(item => {
+        if (!items) return [];
+        return items.filter(item => {
             const source = (item.source || "").toLowerCase();
             return source === "vested" || source === "indmoney";
         });
-    }, [data?.items]);
+    }, [items]);
 
     return (
         <DashboardLayout>

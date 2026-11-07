@@ -4,7 +4,6 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { PortfolioItem } from "./excel-parser";
 import { UploadedFile as UploadedFileType } from "./types";
 import { db } from "./db";
-import { useState } from "react";
 
 export interface PortfolioData {
     lastUpdated: string;
@@ -53,7 +52,7 @@ export function usePortfolioStorage() {
     const uploadedFiles = useLiveQuery(() => db.files.toArray());
 
     // We can't easily get loading state from useLiveQuery (it returns undefined initially)
-    // but practically for IDB it's fast. 
+    // but practically for IDB it's fast.
     // If items is undefined, it's loading.
     const isLoading = items === undefined || uploadedFiles === undefined;
 
@@ -72,9 +71,9 @@ export function usePortfolioStorage() {
         try {
             await db.transaction('rw', db.items, async () => {
                 // 1. Delete existing items for the specific Broker + Owner
-                // We can't rely on compound index easily for delete in one go with simple API, 
+                // We can't rely on compound index easily for delete in one go with simple API,
                 // but we can find primary keys and bulkDelete.
-                // Or simply: db.items.where({source: broker, owner: owner}).delete() 
+                // Or simply: db.items.where({source: broker, owner: owner}).delete()
                 // BUT 'owner' might be optional/missing in DB vs "Self".
                 // Let's be careful. The index is [source+owner].
 

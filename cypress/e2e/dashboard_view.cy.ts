@@ -37,7 +37,7 @@ describe('Dashboard Views and Interaction', () => {
         // Wait for data
         cy.contains('₹27,500', { timeout: 10000 }).should('be.visible');
 
-        // The main dashboard page should show holdings 
+        // The main dashboard page should show holdings
         cy.contains('INFY').should('be.visible');
         cy.contains('RELIANCE').should('be.visible');
     });

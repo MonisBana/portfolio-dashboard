@@ -22,7 +22,7 @@ export function mergePortfolioItems(items: PortfolioItem[]): PortfolioItem[] {
     // Determine the unique key for merging
     // Rule:
     // 1. If we have a valid ISIN, use it as the primary key.
-    // 2. If ISIN is missing/invalid, fallback to Symbol, but use a distinct prefix 
+    // 2. If ISIN is missing/invalid, fallback to Symbol, but use a distinct prefix
     //    so it NEVER merges with an valid ISIN item.
     let key: string;
 

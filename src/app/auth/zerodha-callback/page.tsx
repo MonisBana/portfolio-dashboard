@@ -1,36 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { zerodhaClient } from "@/lib/api/zerodha-client";
 import { Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function ZerodhaCallbackPage() {
+function ZerodhaCallbackContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const [error, setError] = useState<string | null>(null);
-    const [isProcessing, setIsProcessing] = useState(true);
+    const requestToken = searchParams.get('request_token');
+    const status = searchParams.get('status');
+    const isValidRequest = status === 'success' && Boolean(requestToken);
+    const [error, setError] = useState<string | null>(
+        isValidRequest ? null : 'Authentication cancelled or failed',
+    );
 
     useEffect(() => {
-        const requestToken = searchParams.get('request_token');
-        const status = searchParams.get('status');
+        if (!isValidRequest || !requestToken) return;
 
-        if (status === 'success' && requestToken) {
-            const member = sessionStorage.getItem('zerodha_pending_member') || 'Self';
-            zerodhaClient.handleCallback(requestToken, member)
-                .then(() => {
-                    router.push(`/upload?zerodha_connected=true&zerodha_member=${encodeURIComponent(member)}`);
-                })
-                .catch(err => {
-                    setError(err.message || 'Authentication failed');
-                    setIsProcessing(false);
-                });
-        } else {
-            setError('Authentication cancelled or failed');
-            setIsProcessing(false);
-        }
-    }, [searchParams, router]);
+        const member = sessionStorage.getItem('zerodha_pending_member') || 'Self';
+        zerodhaClient.handleCallback(requestToken, member)
+            .then(() => {
+                router.push(`/upload?zerodha_connected=true&zerodha_member=${encodeURIComponent(member)}`);
+            })
+            .catch(err => {
+                setError(err.message || 'Authentication failed');
+            });
+    }, [isValidRequest, requestToken, router]);
 
     return (
         <div className="flex min-h-screen items-center justify-center p-4">
@@ -53,5 +50,19 @@ export default function ZerodhaCallbackPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+export default function ZerodhaCallbackPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="flex min-h-screen items-center justify-center p-4">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                </div>
+            }
+        >
+            <ZerodhaCallbackContent />
+        </Suspense>
     );
 }

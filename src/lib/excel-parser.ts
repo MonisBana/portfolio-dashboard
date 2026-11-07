@@ -14,6 +14,8 @@ export interface PortfolioItem {
     owner?: string; // e.g. "Self", "Spouse"
 }
 
+type CellValue = string | number | boolean | null | undefined;
+
 
 // Helper to clean up instrument type for Asset Allocation (Zerodha specific)
 const cleanInstrumentType = (rawType: string, sector: string): string => {
@@ -50,7 +52,7 @@ export const parseZerodhaExcel = async (file: File): Promise<PortfolioItem[]> =>
                     header: 1,
                     range: range,
                     defval: null,
-                }) as any[][];
+                }) as CellValue[][];
 
                 if (jsonData.length === 0) {
                     reject(new Error("No data found in the expected range"));
@@ -69,7 +71,7 @@ export const parseZerodhaExcel = async (file: File): Promise<PortfolioItem[]> =>
                         symbol: symbol,
                         isin: String(row[1] || ""),
                         sector: String(row[2]) === "-" ? "Mutual Fund" : String(row[2] || ""),
-                        instrumentType: cleanInstrumentType(String(row[3] || ""), row[2]),
+                        instrumentType: cleanInstrumentType(String(row[3] || ""), String(row[2] || "")),
                         quantity: Number(row[4]) || 0,
                         averagePrice: Number(row[9]) || 0,
                         currentValue: (Number(row[4]) || 0) * (Number(row[10]) || 0), // Qty * Previous Closing Price
@@ -123,7 +125,7 @@ export const parseGrowwExcel = async (file: File): Promise<PortfolioItem[]> => {
                     header: 1,
                     range: range,
                     defval: null,
-                }) as any[][];
+                }) as CellValue[][];
 
                 if (jsonData.length === 0) {
                     reject(new Error("No data found in the expected range"));
@@ -256,7 +258,7 @@ export const parseVestedExcel = async (file: File, conversionRate: number): Prom
     });
 };
 
-export const parseIndMoneyExcel = async (file: File, conversionRate: number): Promise<PortfolioItem[]> => {
+export const parseIndMoneyExcel = async (file: File): Promise<PortfolioItem[]> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
 
@@ -307,7 +309,7 @@ export const parseIndMoneyExcel = async (file: File, conversionRate: number): Pr
 
                     const qty = Number(row[13]) || 0;
 
-                    const parseCurrency = (val: any) => {
+                    const parseCurrency = (val: unknown) => {
                         if (typeof val === 'number') return val;
                         if (typeof val === 'string') {
                             return parseFloat(val.replace(/,/g, '')) || 0;

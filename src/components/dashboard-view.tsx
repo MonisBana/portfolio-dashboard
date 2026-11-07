@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Pie, PieChart, Cell } from "recharts";
 import { mergePortfolioItems } from "@/lib/utils";
 import { PortfolioItem } from "@/lib/excel-parser";
@@ -41,7 +41,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Input } from "./ui/input";
 
 interface DashboardViewProps {
   items: PortfolioItem[];
@@ -49,6 +48,70 @@ interface DashboardViewProps {
   title: string;
   lastUpdated?: string;
   showCountryChart?: boolean; // Option to hide country chart if redundant (e.g. on country specific pages)
+}
+
+interface ChartDatum {
+  name: string;
+  value: number;
+  fill: string;
+}
+
+interface SortConfig {
+  key: string;
+  direction: "asc" | "desc";
+}
+
+function SortIcon({
+  columnKey,
+  sortConfig,
+}: {
+  columnKey: string;
+  sortConfig: SortConfig | null;
+}) {
+  if (sortConfig?.key !== columnKey)
+    return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
+  return sortConfig.direction === "asc" ? (
+    <TrendingUp className="ml-2 h-4 w-4" />
+  ) : (
+    <TrendingDown className="ml-2 h-4 w-4" />
+  );
+}
+
+function buildChartData(map: Map<string, number>): {
+  data: ChartDatum[];
+  config: ChartConfig;
+} {
+  const sorted = Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1]) // Sort desc
+    .slice(0, 8); // Top 8
+
+  const otherValue = Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(8)
+    .reduce((sum, [, val]) => sum + val, 0);
+
+  if (otherValue > 0) {
+    const existingOtherIndex = sorted.findIndex(([name]) => name === "Other");
+    if (existingOtherIndex >= 0) {
+      sorted[existingOtherIndex][1] += otherValue;
+    } else {
+      sorted.push(["Other", otherValue]);
+    }
+  }
+
+  const config: ChartConfig = {};
+
+  const data = sorted.map(([name, value], idx) => {
+    const color = `var(--chart-${(idx % 10) + 1})`;
+    config[name] = { label: name, color };
+    return {
+      name,
+      value,
+      fill: color,
+    };
+  });
+
+  return { data, config };
 }
 
 export function DashboardView({
@@ -74,138 +137,110 @@ export function DashboardView({
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }, [items]);
-  // State for dynamic charts
-  const [sectorData, setSectorData] = useState<any[]>([]);
-  const [sectorConfig, setSectorConfig] = useState<ChartConfig>({});
-  const [assetData, setAssetData] = useState<any[]>([]);
-  const [assetConfig, setAssetConfig] = useState<ChartConfig>({});
-  const [countryData, setCountryData] = useState<any[]>([]);
-  const [countryConfig, setCountryConfig] = useState<ChartConfig>({});
-  const [brokerData, setBrokerData] = useState<any[]>([]);
-  const [brokerConfig, setBrokerConfig] = useState<ChartConfig>({});
-  const [searchTerm, setSearchTerm] = useState("");
 
-  // Table State
-  const [sortConfig, setSortConfig] = useState<{
-    key: string;
-    direction: "asc" | "desc";
-  } | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    if (items && items.length > 0) {
-      // Merge items by ISIN for unified view
-      let mergedItems = mergePortfolioItems(items);
+  const {
+    sectorData,
+    sectorConfig,
+    assetData,
+    assetConfig,
+    countryData,
+    countryConfig,
+    brokerData,
+    brokerConfig,
+  } = useMemo(() => {
+    if (!items || items.length === 0) {
+      return {
+        sectorData: [] as ChartDatum[],
+        sectorConfig: {} as ChartConfig,
+        assetData: [] as ChartDatum[],
+        assetConfig: {} as ChartConfig,
+        countryData: [] as ChartDatum[],
+        countryConfig: {} as ChartConfig,
+        brokerData: [] as ChartDatum[],
+        brokerConfig: {} as ChartConfig,
+      };
+    }
 
-      // 1. Process Sector Data
-      const sectorMap = new Map<string, number>();
-      mergedItems.forEach((item) => {
-        const sector =
-          item.sector && item.sector.trim() !== "" ? item.sector : "Other";
-        const val = sectorMap.get(sector) || 0;
-        sectorMap.set(sector, val + item.currentValue);
-      });
+    // Merge items by ISIN for unified view
+    const mergedItems = mergePortfolioItems(items);
 
-      const toChartData = (
-        map: Map<string, number>,
-        configSetter: (c: ChartConfig) => void,
-      ) => {
-        const sorted = Array.from(map.entries())
-          .sort((a, b) => b[1] - a[1]) // Sort desc
-          .slice(0, 8); // Top 8
+    // 1. Process Sector Data
+    const sectorMap = new Map<string, number>();
+    mergedItems.forEach((item) => {
+      const sector =
+        item.sector && item.sector.trim() !== "" ? item.sector : "Other";
+      const val = sectorMap.get(sector) || 0;
+      sectorMap.set(sector, val + item.currentValue);
+    });
 
-        const otherValue = Array.from(map.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(8)
-          .reduce((sum, [, val]) => sum + val, 0);
+    // 2. Process Asset Allocation
+    const assetMap = new Map<string, number>();
+    mergedItems.forEach((item) => {
+      const type =
+        item.instrumentType && item.instrumentType.trim() !== ""
+          ? item.instrumentType
+          : "Equity";
+      const val = assetMap.get(type) || 0;
+      assetMap.set(type, val + item.currentValue);
+    });
 
-        if (otherValue > 0) {
-          const existingOtherIndex = sorted.findIndex(
-            ([name]) => name === "Other",
-          );
-          if (existingOtherIndex >= 0) {
-            sorted[existingOtherIndex][1] += otherValue;
-          } else {
-            sorted.push(["Other", otherValue]);
-          }
+    // 3. Process Geographic Allocation (Only if needed)
+    const countryMap = new Map<string, number>();
+    if (showCountryChart) {
+      // Use raw items instead of mergedItems to preserve original source info
+      items.forEach((item) => {
+        if (item.instrumentType === "Fixed Deposit") return;
+
+        let country = "Other";
+        const source = (item.source || "").toLowerCase();
+
+        // Classification based on known brokers
+        if (["zerodha", "groww"].includes(source)) {
+          country = "India";
+        } else if (["vested", "indmoney"].includes(source)) {
+          country = "US";
+        } else if (item.instrumentType === "Cash") {
+          country = "Cash";
         }
 
-        const newConfig: ChartConfig = {};
-
-        const chartData = sorted.map(([name, value], idx) => {
-          const color = `var(--chart-${(idx % 10) + 1})`;
-          newConfig[name] = { label: name, color };
-          return {
-            name,
-            value,
-            fill: color,
-          };
-        });
-
-        configSetter(newConfig);
-        return chartData;
-      };
-
-      setSectorData(toChartData(sectorMap, setSectorConfig));
-
-      // 2. Process Asset Allocation
-      const assetMap = new Map<string, number>();
-      mergedItems.forEach((item) => {
-        const type =
-          item.instrumentType && item.instrumentType.trim() !== ""
-            ? item.instrumentType
-            : "Equity";
-        const val = assetMap.get(type) || 0;
-        assetMap.set(type, val + item.currentValue);
+        const val = countryMap.get(country) || 0;
+        countryMap.set(country, val + item.currentValue);
       });
-      setAssetData(toChartData(assetMap, setAssetConfig));
-
-      // 3. Process Geographic Allocation (Only if needed)
-      if (showCountryChart) {
-        // Use raw items instead of mergedItems to preserve original source info
-        const countryMap = new Map<string, number>();
-        items.forEach((item) => {
-          if (item.instrumentType === "Fixed Deposit") return;
-
-          let country = "Other";
-          const source = (item.source || "").toLowerCase();
-
-          // Classification based on known brokers
-          if (["zerodha", "groww"].includes(source)) {
-            country = "India";
-          } else if (["vested", "indmoney"].includes(source)) {
-            country = "US";
-          } else if (item.instrumentType === "Cash") {
-            country = "Cash";
-          }
-
-          const val = countryMap.get(country) || 0;
-          countryMap.set(country, val + item.currentValue);
-        });
-        setCountryData(toChartData(countryMap, setCountryConfig));
-      }
-
-      // 4. Process Broker Allocation
-      const brokerMap = new Map<string, number>();
-      items.forEach((item) => {
-        // Capitalize first letter of source just in case
-        const source = item.source || "Unknown";
-        const formattedSource =
-          source.charAt(0).toUpperCase() + source.slice(1);
-
-        const val = brokerMap.get(formattedSource) || 0;
-        brokerMap.set(formattedSource, val + item.currentValue);
-      });
-      setBrokerData(toChartData(brokerMap, setBrokerConfig));
-    } else {
-      // Reset charts if no items
-      setSectorData([]);
-      setAssetData([]);
-      setCountryData([]);
-      setBrokerData([]);
     }
-  }, [items, showCountryChart, searchTerm]);
+
+    // 4. Process Broker Allocation
+    const brokerMap = new Map<string, number>();
+    items.forEach((item) => {
+      // Capitalize first letter of source just in case
+      const source = item.source || "Unknown";
+      const formattedSource =
+        source.charAt(0).toUpperCase() + source.slice(1);
+
+      const val = brokerMap.get(formattedSource) || 0;
+      brokerMap.set(formattedSource, val + item.currentValue);
+    });
+
+    const sector = buildChartData(sectorMap);
+    const asset = buildChartData(assetMap);
+    const country = buildChartData(countryMap);
+    const broker = buildChartData(brokerMap);
+
+    return {
+      sectorData: sector.data,
+      sectorConfig: sector.config,
+      assetData: asset.data,
+      assetConfig: asset.config,
+      countryData: country.data,
+      countryConfig: country.config,
+      brokerData: broker.data,
+      brokerConfig: broker.config,
+    };
+  }, [items, showCountryChart]);
 
   // Derived sorted and paginated items
   const { sortedItems, totalCurrentValue, totalPnL, totalReturnPercent } =
@@ -228,7 +263,7 @@ export function DashboardView({
       }
 
       // Enhance items with returns percentage
-      let processedItems = mergedItems.map((item) => {
+      const processedItems = mergedItems.map((item) => {
         const invested = item.currentValue - item.pnl;
         const returnsPercent = invested !== 0 ? (item.pnl / invested) * 100 : 0;
         return {
@@ -263,8 +298,8 @@ export function DashboardView({
           let key = sortConfig.key;
           if (key === "portfolioPercent") key = "currentValue";
 
-          const aValue = (a as any)[key] || 0;
-          const bValue = (b as any)[key] || 0;
+          const aValue = Number(a[key as keyof typeof a]) || 0;
+          const bValue = Number(b[key as keyof typeof b]) || 0;
 
           if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
           if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
@@ -302,16 +337,6 @@ export function DashboardView({
       }
       return { key, direction: "desc" }; // Default to desc for new columns
     });
-  };
-
-  const SortIcon = ({ columnKey }: { columnKey: string }) => {
-    if (sortConfig?.key !== columnKey)
-      return <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />;
-    return sortConfig.direction === "asc" ? (
-      <TrendingUp className="ml-2 h-4 w-4" />
-    ) : (
-      <TrendingDown className="ml-2 h-4 w-4" />
-    );
   };
 
   if (isLoading) {
@@ -666,7 +691,7 @@ export function DashboardView({
                       className="h-8 p-0 font-semibold hover:bg-transparent"
                       data-testid="sort-symbol"
                     >
-                      Symbol <SortIcon columnKey="symbol" />
+                      Symbol <SortIcon columnKey="symbol" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                   <TableHead>
@@ -675,7 +700,7 @@ export function DashboardView({
                       onClick={() => handleSort("sector")}
                       className="h-8 p-0 font-semibold hover:bg-transparent"
                     >
-                      Sector <SortIcon columnKey="sector" />
+                      Sector <SortIcon columnKey="sector" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">
@@ -684,7 +709,7 @@ export function DashboardView({
                       onClick={() => handleSort("portfolioPercent")}
                       className="h-8 p-0 font-semibold hover:bg-transparent ml-auto"
                     >
-                      Portfolio % <SortIcon columnKey="portfolioPercent" />
+                      Portfolio % <SortIcon columnKey="portfolioPercent" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">
@@ -693,7 +718,7 @@ export function DashboardView({
                       onClick={() => handleSort("quantity")}
                       className="h-8 p-0 font-semibold hover:bg-transparent ml-auto"
                     >
-                      Qty <SortIcon columnKey="quantity" />
+                      Qty <SortIcon columnKey="quantity" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">
@@ -702,7 +727,7 @@ export function DashboardView({
                       onClick={() => handleSort("averagePrice")}
                       className="h-8 p-0 font-semibold hover:bg-transparent ml-auto"
                     >
-                      Avg Price <SortIcon columnKey="averagePrice" />
+                      Avg Price <SortIcon columnKey="averagePrice" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">
@@ -711,7 +736,7 @@ export function DashboardView({
                       onClick={() => handleSort("currentValue")}
                       className="h-8 p-0 font-semibold hover:bg-transparent ml-auto"
                     >
-                      Value <SortIcon columnKey="currentValue" />
+                      Value <SortIcon columnKey="currentValue" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">
@@ -720,7 +745,7 @@ export function DashboardView({
                       onClick={() => handleSort("pnl")}
                       className="h-8 p-0 font-semibold hover:bg-transparent ml-auto"
                     >
-                      P&L <SortIcon columnKey="pnl" />
+                      P&L <SortIcon columnKey="pnl" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                   <TableHead className="text-right">
@@ -729,7 +754,7 @@ export function DashboardView({
                       onClick={() => handleSort("returnsPercent")}
                       className="h-8 p-0 font-semibold hover:bg-transparent ml-auto"
                     >
-                      Returns % <SortIcon columnKey="returnsPercent" />
+                      Returns % <SortIcon columnKey="returnsPercent" sortConfig={sortConfig} />
                     </Button>
                   </TableHead>
                 </TableRow>

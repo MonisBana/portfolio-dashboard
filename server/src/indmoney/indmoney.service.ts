@@ -77,7 +77,7 @@ export class IndMoneyService {
                 this.logger.log(`${accountName} token cleared`);
             }
         } else {
-            this.accounts.forEach((account, name) => {
+            this.accounts.forEach((account) => {
                 account.accessToken = null;
                 account.tokenExpiry = null;
             });
