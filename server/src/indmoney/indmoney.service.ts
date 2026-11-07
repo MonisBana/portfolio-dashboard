@@ -14,16 +14,20 @@ export class IndMoneyService {
     private accounts: Map<string, IndMoneyAccount> = new Map();
 
     constructor() {
-        this.accounts.set('Self', { accessToken: null, tokenExpiry: null });
-        this.accounts.set('Wife', { accessToken: null, tokenExpiry: null });
         this.logger.log('IndMoneyService initialized with multi-account support');
     }
 
-    setToken(bearerToken: string, accountName: string): void {
-        const account = this.accounts.get(accountName);
+    private getOrCreateAccount(accountName: string): IndMoneyAccount {
+        let account = this.accounts.get(accountName);
         if (!account) {
-            throw new BadRequestException('Invalid account name');
+            account = { accessToken: null, tokenExpiry: null };
+            this.accounts.set(accountName, account);
         }
+        return account;
+    }
+
+    setToken(bearerToken: string, accountName: string): void {
+        const account = this.getOrCreateAccount(accountName);
 
         const token = bearerToken.replace('Bearer ', '');
 

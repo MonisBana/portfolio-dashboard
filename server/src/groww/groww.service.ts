@@ -11,21 +11,21 @@ export class GrowwService {
     private accounts: Map<string, GrowwAccount> = new Map();
 
     constructor() {
-        // Initialize accounts
-        this.accounts.set('Self', {
-            accountId: 'self',
-            accountName: 'Self',
-            accessToken: null,
-            tokenExpiry: null,
-        });
-        this.accounts.set('Wife', {
-            accountId: 'wife',
-            accountName: 'Wife',
-            accessToken: null,
-            tokenExpiry: null,
-        });
-
         this.logger.log('GrowwService initialized with multi-account support');
+    }
+
+    private getOrCreateAccount(accountName: string): GrowwAccount {
+        let account = this.accounts.get(accountName);
+        if (!account) {
+            account = {
+                accountId: accountName.toLowerCase(),
+                accountName,
+                accessToken: null,
+                tokenExpiry: null,
+            };
+            this.accounts.set(accountName, account);
+        }
+        return account;
     }
 
     private generateChecksum(apiSecret: string, timestamp: number): string {
@@ -81,10 +81,7 @@ export class GrowwService {
                 throw new Error('Invalid response from Groww API - no token found');
             }
 
-            const account = this.accounts.get(accountName);
-            if (!account) {
-                throw new Error('Invalid account name');
-            }
+            const account = this.getOrCreateAccount(accountName);
 
             account.accessToken = token;
             // Token expires at 6:00 AM next day
@@ -143,10 +140,7 @@ export class GrowwService {
                 throw new Error('Invalid response from Groww API - no token found');
             }
 
-            const account = this.accounts.get(accountName);
-            if (!account) {
-                throw new Error('Invalid account name');
-            }
+            const account = this.getOrCreateAccount(accountName);
 
             account.accessToken = token;
             account.tokenExpiry = this.getNextDayExpiry();

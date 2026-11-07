@@ -17,9 +17,10 @@ export default function ZerodhaCallbackPage() {
         const status = searchParams.get('status');
 
         if (status === 'success' && requestToken) {
-            zerodhaClient.handleCallback(requestToken)
+            const member = sessionStorage.getItem('zerodha_pending_member') || 'Self';
+            zerodhaClient.handleCallback(requestToken, member)
                 .then(() => {
-                    router.push('/upload?zerodha_connected=true');
+                    router.push(`/upload?zerodha_connected=true&zerodha_member=${encodeURIComponent(member)}`);
                 })
                 .catch(err => {
                     setError(err.message || 'Authentication failed');

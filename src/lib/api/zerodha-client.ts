@@ -1,9 +1,14 @@
 import { PortfolioItem } from "../excel-parser";
 import { API_BASE, apiFetch } from "./config";
 
+export interface ZerodhaAccountStatus {
+    accountName: string;
+    isConnected: boolean;
+}
+
 export class ZerodhaClient {
-    async getLoginUrl(): Promise<string> {
-        const res = await apiFetch(`${API_BASE}/api/zerodha/login-url`, {
+    async getLoginUrl(accountName: string = 'Self'): Promise<string> {
+        const res = await apiFetch(`${API_BASE}/api/zerodha/login-url?accountName=${encodeURIComponent(accountName)}`, {
             credentials: 'include'
         });
 
@@ -15,12 +20,12 @@ export class ZerodhaClient {
         return data.url;
     }
 
-    async handleCallback(requestToken: string): Promise<void> {
+    async handleCallback(requestToken: string, accountName?: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/zerodha/auth/callback`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ requestToken })
+            body: JSON.stringify({ requestToken, accountName })
         });
 
         if (!res.ok) {
@@ -29,20 +34,24 @@ export class ZerodhaClient {
         }
     }
 
-    async getStatus(): Promise<{ isConnected: boolean }> {
+    async getStatus(): Promise<{ isConnected: boolean; accounts: ZerodhaAccountStatus[] }> {
         const res = await apiFetch(`${API_BASE}/api/zerodha/status`, {
             credentials: 'include'
         });
 
         if (!res.ok) {
-            return { isConnected: false };
+            return { isConnected: false, accounts: [] };
         }
 
         return await res.json();
     }
 
-    async syncHoldings(): Promise<PortfolioItem[]> {
-        const res = await apiFetch(`${API_BASE}/api/zerodha/holdings`, {
+    async syncHoldings(accountName?: string): Promise<PortfolioItem[]> {
+        const url = accountName
+            ? `${API_BASE}/api/zerodha/holdings?accountName=${encodeURIComponent(accountName)}`
+            : `${API_BASE}/api/zerodha/holdings`;
+
+        const res = await apiFetch(url, {
             credentials: 'include'
         });
 
@@ -58,10 +67,12 @@ export class ZerodhaClient {
         return await res.json();
     }
 
-    async disconnect(): Promise<void> {
+    async disconnect(accountName?: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/zerodha/disconnect`, {
             method: 'POST',
-            credentials: 'include'
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(accountName ? { accountName } : {})
         });
 
         if (!res.ok) {

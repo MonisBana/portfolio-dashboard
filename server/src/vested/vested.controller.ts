@@ -1,6 +1,11 @@
 import { Controller, Get, Post, Body, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { VestedService } from './vested.service';
-import { VestedAuthDto, VestedAuthSuccessResponseDto, VestedStatusResponseDto } from './dto/vested.dto';
+import {
+    VestedAuthDto,
+    AccountSelectionDto,
+    VestedAuthSuccessResponseDto,
+    VestedStatusResponseDto,
+} from './dto/vested.dto';
 
 @Controller('api/vested')
 export class VestedController {
@@ -9,10 +14,12 @@ export class VestedController {
     @Post('auth')
     @HttpCode(HttpStatus.OK)
     authenticate(@Body() dto: VestedAuthDto): VestedAuthSuccessResponseDto {
-        this.vestedService.setToken(dto.bearerToken, dto.csrfToken, dto.cookie);
+        const accountName = dto.accountName || 'Self';
+        this.vestedService.setToken(dto.bearerToken, dto.csrfToken, dto.cookie, accountName);
         return {
             success: true,
-            message: 'Vested account token saved successfully',
+            message: `${accountName} account token saved successfully`,
+            accountName,
         };
     }
 
@@ -25,19 +32,26 @@ export class VestedController {
     @Get('holdings')
     @HttpCode(HttpStatus.OK)
     async getHoldings(
+        @Query('accountName') accountName?: string,
         @Query('conversionRate') conversionRate?: string,
     ) {
         const rate = conversionRate ? parseFloat(conversionRate) : 1;
-        return await this.vestedService.fetchHoldings(rate);
+        if (accountName) {
+            return await this.vestedService.fetchHoldings(rate, accountName);
+        }
+        return await this.vestedService.fetchAllHoldings(rate);
     }
 
     @Post('disconnect')
     @HttpCode(HttpStatus.OK)
-    disconnect(): VestedAuthSuccessResponseDto {
-        this.vestedService.disconnect();
+    disconnect(@Body() dto?: AccountSelectionDto): VestedAuthSuccessResponseDto {
+        this.vestedService.disconnect(dto?.accountName);
         return {
             success: true,
-            message: 'Disconnected from Vested',
+            message: dto?.accountName
+                ? `Disconnected ${dto.accountName} from Vested`
+                : 'Disconnected all accounts from Vested',
+            accountName: dto?.accountName,
         };
     }
 }

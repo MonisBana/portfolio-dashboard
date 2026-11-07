@@ -8,7 +8,7 @@ export interface IndMoneyAccountStatus {
 }
 
 export class IndMoneyClient {
-    async authenticate(bearerToken: string, accountName: 'Self' | 'Wife'): Promise<void> {
+    async authenticate(bearerToken: string, accountName: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/indmoney/auth`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -34,7 +34,7 @@ export class IndMoneyClient {
         return await res.json();
     }
 
-    async syncHoldings(accountName?: 'Self' | 'Wife', conversionRate?: number): Promise<PortfolioItem[]> {
+    async syncHoldings(accountName?: string, conversionRate?: number): Promise<PortfolioItem[]> {
         const params = new URLSearchParams();
         if (accountName) params.set('accountName', accountName);
         if (conversionRate) params.set('conversionRate', conversionRate.toString());
@@ -56,7 +56,7 @@ export class IndMoneyClient {
         return await res.json();
     }
 
-    async disconnect(accountName?: 'Self' | 'Wife'): Promise<void> {
+    async disconnect(accountName?: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/indmoney/disconnect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

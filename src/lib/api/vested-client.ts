@@ -1,13 +1,19 @@
 import { PortfolioItem } from "../excel-parser";
 import { API_BASE, apiFetch } from "./config";
 
+export interface VestedAccountStatus {
+    accountName: string;
+    isConnected: boolean;
+    tokenExpiresAt?: string;
+}
+
 export class VestedClient {
-    async authenticate(bearerToken: string, csrfToken?: string, cookie?: string): Promise<void> {
+    async authenticate(bearerToken: string, csrfToken?: string, cookie?: string, accountName: string = 'Self'): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/vested/auth`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ bearerToken, csrfToken, cookie })
+            body: JSON.stringify({ bearerToken, csrfToken, cookie, accountName })
         });
 
         if (!res.ok) {
@@ -16,21 +22,22 @@ export class VestedClient {
         }
     }
 
-    async getStatus(): Promise<{ isConnected: boolean; tokenExpiresAt?: string }> {
+    async getStatus(): Promise<{ isConnected: boolean; accounts: VestedAccountStatus[]; tokenExpiresAt?: string }> {
         const res = await apiFetch(`${API_BASE}/api/vested/status`, {
             credentials: 'include'
         });
 
         if (!res.ok) {
-            return { isConnected: false };
+            return { isConnected: false, accounts: [] };
         }
 
         return await res.json();
     }
 
-    async syncHoldings(conversionRate?: number): Promise<PortfolioItem[]> {
+    async syncHoldings(conversionRate?: number, accountName?: string): Promise<PortfolioItem[]> {
         const params = new URLSearchParams();
         if (conversionRate) params.set('conversionRate', conversionRate.toString());
+        if (accountName) params.set('accountName', accountName);
 
         const url = `${API_BASE}/api/vested/holdings${params.toString() ? '?' + params.toString() : ''}`;
         const res = await apiFetch(url, {
@@ -49,12 +56,12 @@ export class VestedClient {
         return await res.json();
     }
 
-    async disconnect(): Promise<void> {
+    async disconnect(accountName?: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/vested/disconnect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({})
+            body: JSON.stringify(accountName ? { accountName } : {})
         });
 
         if (!res.ok) {

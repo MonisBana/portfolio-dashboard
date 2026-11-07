@@ -10,11 +10,11 @@ export interface GrowwAuthPayload {
     apiKey: string;
     apiSecret?: string;
     totp?: string;
-    accountName: 'Self' | 'Wife';
+    accountName: string;
 }
 
 export class GrowwClient {
-    async authenticateWithApiKey(apiKey: string, apiSecret: string, accountName: 'Self' | 'Wife'): Promise<void> {
+    async authenticateWithApiKey(apiKey: string, apiSecret: string, accountName: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/groww/auth/api-key`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -28,7 +28,7 @@ export class GrowwClient {
         }
     }
 
-    async authenticateWithTOTP(apiKey: string, totp: string, accountName: 'Self' | 'Wife'): Promise<void> {
+    async authenticateWithTOTP(apiKey: string, totp: string, accountName: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/groww/auth/totp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -54,7 +54,7 @@ export class GrowwClient {
         return await res.json();
     }
 
-    async syncHoldings(accountName?: 'Self' | 'Wife'): Promise<PortfolioItem[]> {
+    async syncHoldings(accountName?: string): Promise<PortfolioItem[]> {
         const url = accountName
             ? `${API_BASE}/api/groww/holdings?accountName=${accountName}`
             : `${API_BASE}/api/groww/holdings`;
@@ -75,7 +75,7 @@ export class GrowwClient {
         return await res.json();
     }
 
-    async disconnect(accountName?: 'Self' | 'Wife'): Promise<void> {
+    async disconnect(accountName?: string): Promise<void> {
         const res = await apiFetch(`${API_BASE}/api/groww/disconnect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -1,15 +1,31 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { UploadCloud, FileText, CheckCircle2, Clock, AlertCircle, Banknote, Trash2, Pencil, RefreshCw, Loader2 } from "lucide-react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import {
+    UploadCloud,
+    FileText,
+    CheckCircle2,
+    Clock,
+    AlertCircle,
+    Banknote,
+    Trash2,
+    Pencil,
+    RefreshCw,
+    Loader2,
+    Plus,
+    Users,
+    Unplug,
+} from "lucide-react";
 import { parseZerodhaExcel, PortfolioItem } from "@/lib/excel-parser";
 import { usePortfolioStorage, UploadedFile } from "@/lib/storage";
+import { useFamilyMembers } from "@/lib/family-members";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { zerodhaClient } from "@/lib/api/zerodha-client";
 import { growwClient } from "@/lib/api/groww-client";
-import { GrowwConnect } from "@/components/groww-connect";
-import { IndMoneyConnect } from "@/components/indmoney-connect";
-import { VestedConnect } from "@/components/vested-connect";
+import { indMoneyClient } from "@/lib/api/indmoney-client";
+import { vestedClient } from "@/lib/api/vested-client";
+import { AddAccountDialog, Broker, BROKERS } from "@/components/add-account-dialog";
+import { FamilyMembersDialog } from "@/components/family-members-dialog";
 import { toast } from "sonner";
 
 import {
@@ -34,8 +50,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
     Table,
     TableBody,
@@ -45,7 +61,12 @@ import {
     TableRow,
 } from "@/components/ui/table";
 
-
+interface ConnectionRow {
+    broker: Broker;
+    member: string;
+    isConnected: boolean;
+    tokenExpiresAt?: string;
+}
 
 function formatFileSize(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -77,34 +98,246 @@ function getStatusText(status: UploadedFile["status"]) {
     }
 }
 
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
 export default function UploadPage() {
-    const { data, savePortfolio, uploadedFiles, addUploadedFile, updateUploadedFileStatus, removeUploadedFile, clearPortfolio } = usePortfolioStorage();
+    const {
+        data,
+        savePortfolio,
+        uploadedFiles,
+        addUploadedFile,
+        updateUploadedFileStatus,
+        removeUploadedFile,
+        clearPortfolio,
+    } = usePortfolioStorage();
+    const { members } = useFamilyMembers();
+    const familyNames = useMemo(
+        () => members.length > 0 ? members.map(member => member.name) : ['Self'],
+        [members]
+    );
+
+    // File upload state
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [pendingFile, setPendingFile] = useState<File | null>(null);
-    const [broker, setBroker] = useState<string>("");
-    const [owner, setOwner] = useState<string>("Self");
+    const [fileBroker, setFileBroker] = useState<string>("");
+    const [fileOwner, setFileOwner] = useState<string>("Self");
     const [conversionRate, setConversionRate] = useState<number>(94.60);
+
+    // Connection state
+    const [connections, setConnections] = useState<ConnectionRow[]>([]);
+    const [connectionsError, setConnectionsError] = useState<string | null>(null);
+    const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false);
+    const [accountDialogBroker, setAccountDialogBroker] = useState<Broker>('Zerodha');
+    const [accountDialogMember, setAccountDialogMember] = useState('Self');
+    const [isFamilyDialogOpen, setIsFamilyDialogOpen] = useState(false);
+    const [syncingKey, setSyncingKey] = useState<string | null>(null);
+    const [isSyncingAll, setIsSyncingAll] = useState(false);
+    const [usdInrRate, setUsdInrRate] = useState<number>(94.60);
+    const [memberFilter, setMemberFilter] = useState<string>('All');
 
     // Manual Asset State
     const [isManualDialogOpen, setIsManualDialogOpen] = useState(false);
     const [manualType, setManualType] = useState<"Cash" | "Fixed Deposit">("Cash");
     const [manualAmount, setManualAmount] = useState<string>("");
     const [manualName, setManualName] = useState<string>("");
-    const [editingAssetIsin, setEditingAssetIsin] = useState<string | null>(null); // Track if editing
-
-    // Zerodha API Sync State
-    const [zerodhaConnected, setZerodhaConnected] = useState(false);
-    const [zerodhaStatusError, setZerodhaStatusError] = useState<string | null>(null);
-    const [isSyncing, setIsSyncing] = useState(false);
-    const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+    const [manualOwner, setManualOwner] = useState<string>("Self");
+    const [editingAssetIsin, setEditingAssetIsin] = useState<string | null>(null);
 
     const [isDragOver, setIsDragOver] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const didInit = useRef(false);
+
+    useEffect(() => {
+        const savedRate = localStorage.getItem("portfolio_usd_inr_rate");
+        if (savedRate) {
+            setUsdInrRate(parseFloat(savedRate));
+        }
+    }, []);
+
+    useEffect(() => {
+        if (familyNames.length > 0 && !familyNames.includes(fileOwner)) {
+            setFileOwner(familyNames[0]);
+        }
+        if (familyNames.length > 0 && !familyNames.includes(manualOwner)) {
+            setManualOwner(familyNames[0]);
+        }
+        if (memberFilter !== 'All' && !familyNames.includes(memberFilter)) {
+            setMemberFilter('All');
+        }
+    }, [familyNames, fileOwner, manualOwner, memberFilter]);
+
+    const loadConnections = useCallback(async () => {
+        const results = await Promise.allSettled([
+            growwClient.getStatus().then(status => status.accounts.map(account => ({
+                broker: 'Groww' as Broker,
+                member: account.accountName,
+                isConnected: account.isConnected,
+            }))),
+            indMoneyClient.getStatus().then(status => status.accounts.map(account => ({
+                broker: 'IndMoney' as Broker,
+                member: account.accountName,
+                isConnected: account.isConnected,
+                tokenExpiresAt: account.tokenExpiresAt,
+            }))),
+            vestedClient.getStatus().then(status => (status.accounts || []).map(account => ({
+                broker: 'Vested' as Broker,
+                member: account.accountName,
+                isConnected: account.isConnected,
+                tokenExpiresAt: account.tokenExpiresAt,
+            }))),
+            zerodhaClient.getStatus().then(status => (status.accounts || []).map(account => ({
+                broker: 'Zerodha' as Broker,
+                member: account.accountName,
+                isConnected: account.isConnected,
+            }))),
+        ]);
+
+        const rows: ConnectionRow[] = [];
+        let firstError: unknown = null;
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                rows.push(...result.value);
+            } else if (!firstError) {
+                firstError = result.reason;
+            }
+        }
+
+        setConnections(rows);
+        setConnectionsError(firstError ? getErrorMessage(firstError) : null);
+    }, []);
+
+    const syncConnection = useCallback(async (row: ConnectionRow) => {
+        const key = `${row.broker}:${row.member}`;
+        setSyncingKey(key);
+
+        try {
+            let holdings: PortfolioItem[];
+
+            switch (row.broker) {
+                case 'Zerodha':
+                    holdings = await zerodhaClient.syncHoldings(row.member);
+                    break;
+                case 'Groww':
+                    holdings = await growwClient.syncHoldings(row.member);
+                    break;
+                case 'IndMoney':
+                    holdings = await indMoneyClient.syncHoldings(row.member, usdInrRate);
+                    break;
+                case 'Vested':
+                    holdings = await vestedClient.syncHoldings(usdInrRate, row.member);
+                    break;
+            }
+
+            await savePortfolio(holdings, row.broker, row.member);
+            await addUploadedFile({
+                id: `${Date.now()}-${row.broker}-${row.member}`,
+                filename: `${row.broker} API Sync - ${row.member}`,
+                size: 0,
+                source: row.broker,
+                owner: row.member,
+                status: "completed",
+                description: `API Sync - ${holdings.length} holdings`,
+                uploadDate: new Date().toISOString(),
+            });
+
+            toast.success(`Synced ${holdings.length} holdings from ${row.broker} (${row.member})`);
+            await loadConnections();
+        } catch (error) {
+            toast.error(`Sync failed for ${row.broker} (${row.member}): ${getErrorMessage(error)}`);
+        } finally {
+            setSyncingKey(null);
+        }
+    }, [savePortfolio, addUploadedFile, usdInrRate, loadConnections]);
+
+    useEffect(() => {
+        if (didInit.current) return;
+        didInit.current = true;
+
+        loadConnections();
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('zerodha_connected') === 'true') {
+            const member = params.get('zerodha_member')
+                || sessionStorage.getItem('zerodha_pending_member')
+                || 'Self';
+            sessionStorage.removeItem('zerodha_pending_member');
+            window.history.replaceState({}, '', '/upload');
+            toast.success(`Zerodha connected for ${member}`);
+            loadConnections().then(() => {
+                void syncConnection({ broker: 'Zerodha', member, isConnected: true });
+            });
+        }
+    }, [loadConnections, syncConnection]);
+
+    const openAccountDialog = (broker: Broker = 'Zerodha', member: string = familyNames[0] || 'Self') => {
+        setAccountDialogBroker(broker);
+        setAccountDialogMember(member);
+        setIsAccountDialogOpen(true);
+    };
+
+    const handleAccountConnected = useCallback(async (broker: Broker, member: string) => {
+        await loadConnections();
+        void syncConnection({ broker, member, isConnected: true });
+    }, [loadConnections, syncConnection]);
+
+    const handleSyncAll = async () => {
+        const connectedRows = connections.filter(row => row.isConnected);
+        if (connectedRows.length === 0) {
+            toast.error('No connected accounts to sync');
+            return;
+        }
+
+        setIsSyncingAll(true);
+        try {
+            for (const row of connectedRows) {
+                await syncConnection(row);
+            }
+        } finally {
+            setIsSyncingAll(false);
+        }
+    };
+
+    const handleDisconnect = async (row: ConnectionRow) => {
+        if (!confirm(`Disconnect ${row.broker} for ${row.member}?`)) {
+            return;
+        }
+
+        try {
+            switch (row.broker) {
+                case 'Zerodha':
+                    await zerodhaClient.disconnect(row.member);
+                    break;
+                case 'Groww':
+                    await growwClient.disconnect(row.member);
+                    break;
+                case 'IndMoney':
+                    await indMoneyClient.disconnect(row.member);
+                    break;
+                case 'Vested':
+                    await vestedClient.disconnect(row.member);
+                    break;
+            }
+            toast.success(`Disconnected ${row.broker} for ${row.member}`);
+            await loadConnections();
+        } catch (error) {
+            toast.error(getErrorMessage(error));
+        }
+    };
+
+    const handleUsdInrRateChange = (value: string) => {
+        const rate = parseFloat(value) || 0;
+        setUsdInrRate(rate);
+        localStorage.setItem("portfolio_usd_inr_rate", rate.toString());
+    };
 
     const handleFileSelect = useCallback((file: File) => {
         setPendingFile(file);
+        setFileBroker("");
+        setFileOwner(familyNames[0] || 'Self');
         setIsDialogOpen(true);
-    }, []);
+    }, [familyNames]);
 
     const handleDrop = useCallback(
         (e: React.DragEvent<HTMLDivElement>) => {
@@ -134,22 +367,21 @@ export default function UploadPage() {
             if (file) {
                 handleFileSelect(file);
             }
-            // Reset input so same file can be selected again
             e.target.value = "";
         },
         [handleFileSelect]
     );
 
     const handleSubmit = useCallback(async () => {
-        if (!pendingFile || !broker) return;
+        if (!pendingFile || !fileBroker) return;
 
         const newFileId = Date.now().toString();
         const newFile: UploadedFile = {
             id: newFileId,
             filename: pendingFile.name,
             size: pendingFile.size,
-            source: broker,
-            owner: owner,
+            source: fileBroker,
+            owner: fileOwner,
             status: "processing",
             description: "Portfolio Import",
             uploadDate: new Date().toISOString(),
@@ -160,15 +392,15 @@ export default function UploadPage() {
 
         try {
             let items;
-            if (broker === "Zerodha") {
+            if (fileBroker === "Zerodha") {
                 items = await parseZerodhaExcel(pendingFile);
-            } else if (broker === "Groww") {
+            } else if (fileBroker === "Groww") {
                 const { parseGrowwExcel } = await import("@/lib/excel-parser");
                 items = await parseGrowwExcel(pendingFile);
-            } else if (broker === "Vested") {
+            } else if (fileBroker === "Vested") {
                 const { parseVestedExcel } = await import("@/lib/excel-parser");
                 items = await parseVestedExcel(pendingFile, conversionRate);
-            } else if (broker === "IndMoney") {
+            } else if (fileBroker === "IndMoney") {
                 const { parseIndMoneyExcel } = await import("@/lib/excel-parser");
                 items = await parseIndMoneyExcel(pendingFile, conversionRate);
             } else {
@@ -176,7 +408,7 @@ export default function UploadPage() {
             }
 
             if (items) {
-                const success = await savePortfolio(items, broker, owner);
+                const success = await savePortfolio(items, fileBroker, fileOwner);
                 if (success) {
                     await updateUploadedFileStatus(newFileId, "completed");
                 } else {
@@ -185,22 +417,20 @@ export default function UploadPage() {
             } else {
                 throw new Error("No items parsed");
             }
-
         } catch (error) {
             console.error("Upload processing failed:", error);
+            toast.error(getErrorMessage(error));
             await updateUploadedFileStatus(newFileId, "failed");
         }
 
         setPendingFile(null);
-        setBroker("");
-        setOwner("Self");
-    }, [pendingFile, broker, owner, conversionRate, savePortfolio, addUploadedFile, updateUploadedFileStatus]);
+        setFileBroker("");
+    }, [pendingFile, fileBroker, fileOwner, conversionRate, savePortfolio, addUploadedFile, updateUploadedFileStatus]);
 
     const handleCancel = useCallback(() => {
         setIsDialogOpen(false);
         setPendingFile(null);
-        setBroker("");
-        setOwner("Self");
+        setFileBroker("");
         setConversionRate(94.60);
     }, []);
 
@@ -220,18 +450,18 @@ export default function UploadPage() {
         const amount = parseFloat(manualAmount);
         if (isNaN(amount) || amount <= 0) return;
 
-        // Get existing manual items
-        const existingManualItems = data?.items.filter(i => i.source === "Manual") || [];
+        const existingManualItems = data?.items.filter(item =>
+            item.source === "Manual" && (item.owner || "Self") === manualOwner
+        ) || [];
 
-        // If editing, find and replace, OR remove old one
         let updatedItems = existingManualItems;
         if (editingAssetIsin) {
-            updatedItems = existingManualItems.filter(i => i.isin !== editingAssetIsin);
+            updatedItems = existingManualItems.filter(item => item.isin !== editingAssetIsin);
         }
 
         const newItem: PortfolioItem = {
             symbol: manualName || manualType,
-            isin: editingAssetIsin || `IN:${manualType.toUpperCase()}_${Date.now()}`,
+            isin: editingAssetIsin || `IN:${manualType.toUpperCase().replace(/\s+/g, '_')}_${Date.now()}`,
             sector: manualType,
             instrumentType: manualType,
             quantity: 1,
@@ -239,197 +469,248 @@ export default function UploadPage() {
             currentValue: amount,
             pnl: 0,
             source: "Manual",
-            owner: "Self" // Manual assets default to Self for now
+            owner: manualOwner,
         };
 
-        const newItems = [...updatedItems, newItem];
-
-        await savePortfolio(newItems, "Manual", "Self");
+        await savePortfolio([...updatedItems, newItem], "Manual", manualOwner);
 
         setIsManualDialogOpen(false);
         setManualAmount("");
         setManualName("");
         setManualType("Cash");
         setEditingAssetIsin(null);
-    }, [manualAmount, manualName, manualType, editingAssetIsin, data, savePortfolio]);
+    }, [manualAmount, manualName, manualType, manualOwner, editingAssetIsin, data, savePortfolio]);
 
     const handleEditManualAsset = (item: PortfolioItem) => {
         setManualType(item.instrumentType as "Cash" | "Fixed Deposit");
         setManualAmount(item.currentValue.toString());
         setManualName(item.symbol === item.instrumentType ? "" : item.symbol);
+        setManualOwner(item.owner || "Self");
         setEditingAssetIsin(item.isin);
         setIsManualDialogOpen(true);
     };
 
-    const handleDeleteManualAsset = async (isin: string) => {
-        const existingManualItems = data?.items.filter(i => i.source === "Manual") || [];
-        const newItems = existingManualItems.filter(i => i.isin !== isin);
-        await savePortfolio(newItems, "Manual", "Self");
+    const handleDeleteManualAsset = async (item: PortfolioItem) => {
+        const itemOwner = item.owner || "Self";
+        const remainingItems = data?.items.filter(existing =>
+            existing.source === "Manual"
+            && (existing.owner || "Self") === itemOwner
+            && existing.isin !== item.isin
+        ) || [];
+        await savePortfolio(remainingItems, "Manual", itemOwner);
     };
 
-    const handleZerodhaConnect = async () => {
-        try {
-            const loginUrl = await zerodhaClient.getLoginUrl();
-            window.location.href = loginUrl;
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to initiate Zerodha connection");
-        }
-    };
+    const matchesMemberFilter = (owner?: string) =>
+        memberFilter === 'All' || (owner || 'Self') === memberFilter;
 
-    const handleZerodhaSync = async () => {
-        setIsSyncing(true);
-        try {
-            const holdings = await zerodhaClient.syncHoldings();
+    const filteredConnections = connections.filter(row => matchesMemberFilter(row.member));
+    const filteredUploadedFiles = uploadedFiles.filter(file => matchesMemberFilter(file.owner));
+    const manualItems = (data?.items || []).filter(item =>
+        item.source === "Manual" && matchesMemberFilter(item.owner)
+    );
 
-            await savePortfolio(holdings, "Zerodha", owner);
-
-            await addUploadedFile({
-                id: Date.now().toString(),
-                filename: "Zerodha API Sync",
-                size: 0,
-                source: "Zerodha",
-                owner: owner,
-                status: "completed",
-                description: `API Sync - ${holdings.length} holdings`,
-                uploadDate: new Date().toISOString()
-            });
-
-            const syncTime = new Date().toISOString();
-            setLastSyncTime(syncTime);
-            localStorage.setItem("zerodha_last_sync", syncTime);
-            toast.success(`Synced ${holdings.length} holdings from Zerodha`);
-        } catch (error: any) {
-            if (error.message === 'TOKEN_EXPIRED') {
-                setZerodhaConnected(false);
-                toast.error("Session expired. Please reconnect to Zerodha.");
-            } else {
-                toast.error("Sync failed: " + error.message);
-            }
-        } finally {
-            setIsSyncing(false);
-        }
-    };
-
-    const handleIndMoneySyncSuccess = async (holdings: PortfolioItem[], accountName: string) => {
-        try {
-            await savePortfolio(holdings, "IndMoney", accountName);
-
-            await addUploadedFile({
-                id: Date.now().toString() + accountName,
-                filename: `INDMoney API Sync - ${accountName}`,
-                size: 0,
-                source: "IndMoney",
-                owner: accountName,
-                status: "completed",
-                description: `API Sync - ${holdings.length} holdings`,
-                uploadDate: new Date().toISOString()
-            });
-        } catch (error) {
-            console.error('INDMoney sync callback error:', error);
-        }
-    };
-
-    const handleVestedSyncSuccess = async (holdings: PortfolioItem[]) => {
-        try {
-            await savePortfolio(holdings, "Vested", "Self");
-
-            await addUploadedFile({
-                id: Date.now().toString() + 'Vested',
-                filename: `Vested API Sync`,
-                size: 0,
-                source: "Vested",
-                owner: "Self",
-                status: "completed",
-                description: `API Sync - ${holdings.length} holdings`,
-                uploadDate: new Date().toISOString()
-            });
-        } catch (error) {
-            console.error('Vested sync callback error:', error);
-        }
-    };
-
-    const handleGrowwSyncSuccess = async () => {
-        try {
-            const status = await growwClient.getStatus();
-
-            for (const account of status.accounts) {
-                if (account.isConnected) {
-                    try {
-                        const holdings = await growwClient.syncHoldings(account.accountName as 'Self' | 'Wife');
-
-                        await savePortfolio(holdings, "Groww", account.accountName);
-
-                        await addUploadedFile({
-                            id: Date.now().toString() + account.accountName,
-                            filename: `Groww API Sync - ${account.accountName}`,
-                            size: 0,
-                            source: "Groww",
-                            owner: account.accountName,
-                            status: "completed",
-                            description: `API Sync - ${holdings.length} holdings`,
-                            uploadDate: new Date().toISOString()
-                        });
-                    } catch (error) {
-                        console.error(`Failed to sync ${account.accountName}:`, error);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Groww sync callback error:', error);
-        }
-    };
-
-    useEffect(() => {
-        zerodhaClient.getStatus()
-            .then(status => {
-                setZerodhaConnected(status.isConnected);
-                setZerodhaStatusError(null);
-            })
-            .catch((error) => {
-                setZerodhaConnected(false);
-                setZerodhaStatusError(error instanceof Error ? error.message : "Failed to reach the Zerodha API");
-            });
-
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('zerodha_connected') === 'true') {
-            setZerodhaConnected(true);
-            toast.success("Successfully connected to Zerodha!");
-            window.history.replaceState({}, '', '/upload');
-        }
-
-        const savedSyncTime = localStorage.getItem("zerodha_last_sync");
-        if (savedSyncTime) {
-            setLastSyncTime(savedSyncTime);
-        }
-    }, []);
+    const getLastSyncTime = (row: ConnectionRow) => uploadedFiles.find(file =>
+        file.source === row.broker && (file.owner || 'Self') === row.member
+    )?.uploadDate;
 
     return (
         <DashboardLayout>
             <div className="space-y-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Upload</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">Upload & Connections</h1>
                         <p className="text-muted-foreground mt-1">
-                            Upload and manage your data files
+                            Add broker accounts, import files, and manage manual assets for your family.
                         </p>
                     </div>
-                    <Button
-                        variant="destructive"
-                        onClick={handleClearAllData}
-                        className="gap-2"
-                        data-testid="clear-all-data-btn"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                        Clear All Data
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => setIsFamilyDialogOpen(true)} className="gap-2">
+                            <Users className="h-4 w-4" />
+                            Family Members
+                        </Button>
+                        <Button onClick={() => openAccountDialog()} className="gap-2">
+                            <Plus className="h-4 w-4" />
+                            Add Account
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleClearAllData}
+                            className="gap-2"
+                            data-testid="clear-all-data-btn"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                            Clear All Data
+                        </Button>
+                    </div>
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">Family:</span>
+                    <Button
+                        size="sm"
+                        variant={memberFilter === 'All' ? 'default' : 'outline'}
+                        onClick={() => setMemberFilter('All')}
+                    >
+                        All
+                    </Button>
+                    {familyNames.map(name => (
+                        <Button
+                            key={name}
+                            size="sm"
+                            variant={memberFilter === name ? 'default' : 'outline'}
+                            onClick={() => setMemberFilter(name)}
+                        >
+                            {name}
+                        </Button>
+                    ))}
+                </div>
+
+                <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+                    <CardHeader>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <CardTitle className="text-lg">Connected Accounts</CardTitle>
+                                <CardDescription>
+                                    Sync holdings directly from your broker accounts.
+                                </CardDescription>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                                    USD → INR
+                                </label>
+                                <Input
+                                    type="number"
+                                    value={usdInrRate}
+                                    onChange={(event) => handleUsdInrRateChange(event.target.value)}
+                                    className="h-8 w-24 text-sm"
+                                    step="0.1"
+                                />
+                                <Button
+                                    onClick={handleSyncAll}
+                                    disabled={isSyncingAll || connections.filter(row => row.isConnected).length === 0}
+                                    className="gap-2"
+                                >
+                                    {isSyncingAll ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="h-4 w-4" />
+                                    )}
+                                    Sync All
+                                </Button>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {connectionsError && (
+                            <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>{connectionsError}</span>
+                            </div>
+                        )}
+
+                        {filteredConnections.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-10 text-center">
+                                <RefreshCw className="h-8 w-8 text-muted-foreground/50" />
+                                <p className="mt-3 text-sm text-muted-foreground">
+                                    No broker accounts connected{memberFilter === 'All' ? '' : ` for ${memberFilter}`}.
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    className="mt-4 gap-2"
+                                    onClick={() => openAccountDialog('Zerodha', memberFilter === 'All' ? familyNames[0] : memberFilter)}
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    Add Account
+                                </Button>
+                            </div>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="border-border/50 hover:bg-transparent">
+                                        <TableHead className="font-semibold">Broker</TableHead>
+                                        <TableHead className="font-semibold">Member</TableHead>
+                                        <TableHead className="font-semibold">Status</TableHead>
+                                        <TableHead className="font-semibold">Last Synced</TableHead>
+                                        <TableHead className="w-[220px] text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredConnections.map(row => {
+                                        const key = `${row.broker}:${row.member}`;
+                                        const isSyncing = syncingKey === key;
+                                        const lastSync = getLastSyncTime(row);
+
+                                        return (
+                                            <TableRow key={key} className="border-border/50">
+                                                <TableCell className="font-medium">{row.broker}</TableCell>
+                                                <TableCell>{row.member}</TableCell>
+                                                <TableCell>
+                                                    {row.isConnected ? (
+                                                        <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
+                                                            <CheckCircle2 className="h-4 w-4" />
+                                                            Connected
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                                                            <AlertCircle className="h-4 w-4" />
+                                                            Expired
+                                                        </span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-sm text-muted-foreground">
+                                                    {lastSync ? new Date(lastSync).toLocaleString() : 'Never'}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {row.isConnected ? (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => syncConnection(row)}
+                                                                disabled={isSyncing}
+                                                                className="gap-1"
+                                                            >
+                                                                {isSyncing ? (
+                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                ) : (
+                                                                    <RefreshCw className="h-4 w-4" />
+                                                                )}
+                                                                Sync
+                                                            </Button>
+                                                        ) : (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => openAccountDialog(row.broker, row.member)}
+                                                            >
+                                                                Reconnect
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => handleDisconnect(row)}
+                                                            title="Disconnect"
+                                                        >
+                                                            <Unplug className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Drag & Drop Zone */}
                 <Card className="bg-card/50 backdrop-blur-sm border-border/50">
                     <CardHeader>
                         <CardTitle className="text-lg">Upload Files</CardTitle>
                         <CardDescription>
-                            Drag and drop files or click to browse
+                            Import a broker export file and choose the family member it belongs to.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -487,6 +768,7 @@ export default function UploadPage() {
                             setManualType("Cash");
                             setManualAmount("");
                             setManualName("");
+                            setManualOwner(familyNames[0] || "Self");
                             setIsManualDialogOpen(true);
                         }} variant="outline" size="sm" className="gap-2" data-testid="add-manual-asset-btn">
                             <Banknote className="h-4 w-4" />
@@ -494,7 +776,7 @@ export default function UploadPage() {
                         </Button>
                     </CardHeader>
                     <CardContent>
-                        {(!data?.items.some(i => i.source === "Manual")) ? (
+                        {manualItems.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-6 text-center">
                                 <Banknote className="h-8 w-8 text-muted-foreground/50" />
                                 <p className="mt-2 text-sm text-muted-foreground">
@@ -506,16 +788,22 @@ export default function UploadPage() {
                                 <TableHeader>
                                     <TableRow className="border-border/50 hover:bg-transparent">
                                         <TableHead className="font-semibold">Asset Name</TableHead>
+                                        <TableHead className="font-semibold">Member</TableHead>
                                         <TableHead className="font-semibold">Type</TableHead>
                                         <TableHead className="font-semibold">Amount</TableHead>
                                         <TableHead className="w-[100px] text-right">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {data?.items.filter(i => i.source === "Manual").map((item) => (
+                                    {manualItems.map((item) => (
                                         <TableRow key={item.isin} className="border-border/50">
                                             <TableCell className="font-medium">
                                                 {item.symbol}
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                                                    {item.owner || "Self"}
+                                                </span>
                                             </TableCell>
                                             <TableCell>
                                                 <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
@@ -539,7 +827,7 @@ export default function UploadPage() {
                                                         variant="ghost"
                                                         size="icon"
                                                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                                        onClick={() => handleDeleteManualAsset(item.isin)}
+                                                        onClick={() => handleDeleteManualAsset(item)}
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
@@ -553,85 +841,16 @@ export default function UploadPage() {
                     </CardContent>
                 </Card>
 
-                {/* Zerodha API Sync Card */}
-                <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <RefreshCw className="h-5 w-5" />
-                            Zerodha API Sync
-                        </CardTitle>
-                        <CardDescription>
-                            Sync holdings directly from your Zerodha account
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {!zerodhaConnected ? (
-                            <div className="space-y-2">
-                                {zerodhaStatusError && (
-                                    <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">
-                                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                                        <span>{zerodhaStatusError}</span>
-                                    </div>
-                                )}
-                                <p className="text-sm text-muted-foreground">
-                                    Connect your Zerodha account to enable automatic syncing
-                                </p>
-                                <Button onClick={handleZerodhaConnect} className="w-full">
-                                    Connect to Zerodha
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-sm text-emerald-600">
-                                    <CheckCircle2 className="h-4 w-4" />
-                                    Connected to Zerodha
-                                </div>
-                                <Button
-                                    onClick={handleZerodhaSync}
-                                    disabled={isSyncing}
-                                    className="w-full"
-                                >
-                                    {isSyncing ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                            Syncing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <RefreshCw className="h-4 w-4 mr-2" />
-                                            Sync Now
-                                        </>
-                                    )}
-                                </Button>
-                                {lastSyncTime && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Last synced: {new Date(lastSyncTime).toLocaleString()}
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Groww Integration */}
-                <GrowwConnect onSyncSuccess={handleGrowwSyncSuccess} />
-
-                {/* Vested Integration */}
-                <VestedConnect onSyncSuccess={handleVestedSyncSuccess} />
-
-                {/* INDMoney Integration */}
-                <IndMoneyConnect onSyncSuccess={handleIndMoneySyncSuccess} />
-
                 {/* Uploaded Files Table */}
                 <Card className="bg-card/50 backdrop-blur-sm border-border/50">
                     <CardHeader>
                         <CardTitle className="text-lg">Uploaded Files</CardTitle>
                         <CardDescription>
-                            View and manage your uploaded documents
+                            View and manage your imported documents
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {uploadedFiles.length === 0 ? (
+                        {filteredUploadedFiles.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
                                 <FileText className="h-12 w-12 text-muted-foreground/50" />
                                 <p className="mt-4 text-sm text-muted-foreground">
@@ -651,7 +870,7 @@ export default function UploadPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {uploadedFiles.map((file) => (
+                                    {filteredUploadedFiles.map((file) => (
                                         <TableRow key={file.id} className="border-border/50">
                                             <TableCell className="font-medium">
                                                 <div className="flex items-center gap-2">
@@ -696,6 +915,21 @@ export default function UploadPage() {
                     </CardContent>
                 </Card>
 
+                <AddAccountDialog
+                    open={isAccountDialogOpen}
+                    onOpenChange={setIsAccountDialogOpen}
+                    members={familyNames}
+                    initialBroker={accountDialogBroker}
+                    initialMember={accountDialogMember}
+                    onConnected={handleAccountConnected}
+                />
+
+                <FamilyMembersDialog
+                    open={isFamilyDialogOpen}
+                    onOpenChange={setIsFamilyDialogOpen}
+                    onChanged={loadConnections}
+                />
+
                 {/* Upload Dialog */}
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogContent className="sm:max-w-md">
@@ -710,31 +944,37 @@ export default function UploadPage() {
                         <div className="space-y-4 py-4">
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Broker / Source</label>
-                                <Select value={broker} onValueChange={setBroker}>
+                                <Select value={fileBroker} onValueChange={setFileBroker}>
                                     <SelectTrigger data-testid="broker-select-trigger">
                                         <SelectValue placeholder="Select broker" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="Zerodha">Zerodha</SelectItem>
-                                        <SelectItem value="Groww">Groww</SelectItem>
-                                        <SelectItem value="Vested">Vested (US Stocks)</SelectItem>
-                                        <SelectItem value="IndMoney">Ind Money (US Stocks)</SelectItem>
+                                        {BROKERS.map(option => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Family Member</label>
-                                <input
-                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                    value={owner}
-                                    onChange={(e) => setOwner(e.target.value)}
-                                    placeholder="e.g. Self, Spouse"
-                                    data-testid="owner-input"
-                                />
+                                <Select value={fileOwner} onValueChange={setFileOwner}>
+                                    <SelectTrigger className="w-full" data-testid="owner-input">
+                                        <SelectValue placeholder="Select member" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {familyNames.map(name => (
+                                            <SelectItem key={name} value={name}>
+                                                {name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
 
-                            {(broker === "Vested") && (
+                            {(fileBroker === "Vested" || fileBroker === "IndMoney") && (
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">USD to INR Rate</label>
                                     <div className="flex items-center gap-2">
@@ -755,7 +995,7 @@ export default function UploadPage() {
                             <Button variant="outline" onClick={handleCancel}>
                                 Cancel
                             </Button>
-                            <Button onClick={handleSubmit} disabled={!broker} data-testid="upload-submit-btn">
+                            <Button onClick={handleSubmit} disabled={!fileBroker} data-testid="upload-submit-btn">
                                 Upload
                             </Button>
                         </DialogFooter>
@@ -773,8 +1013,23 @@ export default function UploadPage() {
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                             <div className="space-y-2">
+                                <label className="text-sm font-medium">Family Member</label>
+                                <Select value={manualOwner} onValueChange={setManualOwner}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select member" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {familyNames.map(name => (
+                                            <SelectItem key={name} value={name}>
+                                                {name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
                                 <label className="text-sm font-medium">Asset Type</label>
-                                <Select value={manualType} onValueChange={(v: any) => setManualType(v)}>
+                                <Select value={manualType} onValueChange={(v) => setManualType(v as "Cash" | "Fixed Deposit")}>
                                     <SelectTrigger data-testid="manual-type-select">
                                         <SelectValue />
                                     </SelectTrigger>

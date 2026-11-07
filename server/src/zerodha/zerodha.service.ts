@@ -3,12 +3,19 @@ import { KiteConnect } from 'kiteconnect';
 import type { Connect, PortfolioHolding } from 'kiteconnect';
 import { PortfolioItem } from './interfaces/zerodha.interface';
 
+interface ZerodhaAccount {
+    accountName: string;
+    accessToken: string | null;
+    tokenExpiry: Date | null;
+    kiteConnect: Connect;
+}
+
 @Injectable()
 export class ZerodhaService {
     private readonly logger = new Logger(ZerodhaService.name);
-    private kiteConnect: Connect;
-    private accessToken: string | null = null;
-    private tokenExpiry: Date | null = null;
+    private readonly apiKey: string;
+    private accounts: Map<string, ZerodhaAccount> = new Map();
+    private pendingAccountName: string = 'Self';
 
     constructor() {
         const apiKey = process.env.ZERODHA_API_KEY;
@@ -17,17 +24,29 @@ export class ZerodhaService {
             throw new Error('ZERODHA_API_KEY is not set in environment variables');
         }
 
-        this.kiteConnect = new KiteConnect({
-            api_key: apiKey
-        });
-
-        this.logger.log('ZerodhaService initialized');
+        this.apiKey = apiKey;
+        this.logger.log('ZerodhaService initialized with multi-account support');
     }
 
-    getLoginUrl(): string {
+    private getOrCreateAccount(accountName: string): ZerodhaAccount {
+        let account = this.accounts.get(accountName);
+        if (!account) {
+            account = {
+                accountName,
+                accessToken: null,
+                tokenExpiry: null,
+                kiteConnect: new KiteConnect({ api_key: this.apiKey }),
+            };
+            this.accounts.set(accountName, account);
+        }
+        return account;
+    }
+
+    getLoginUrl(accountName: string = 'Self'): string {
         try {
-            const loginUrl = this.kiteConnect.getLoginURL();
-            this.logger.log(`Generated login URL: ${loginUrl}`);
+            this.pendingAccountName = accountName;
+            const loginUrl = this.getOrCreateAccount(accountName).kiteConnect.getLoginURL();
+            this.logger.log(`Generated login URL for ${accountName}`);
             return loginUrl;
         } catch (error) {
             this.logger.error('Failed to generate login URL', error);
@@ -35,77 +54,134 @@ export class ZerodhaService {
         }
     }
 
-    async generateAccessToken(requestToken: string): Promise<void> {
+    async generateAccessToken(requestToken: string, accountName?: string): Promise<void> {
+        const name = accountName || this.pendingAccountName || 'Self';
         try {
             const apiSecret = process.env.ZERODHA_API_SECRET;
             if (!apiSecret) {
                 throw new Error('ZERODHA_API_SECRET is not set in environment variables');
             }
 
-            this.logger.log('Generating access token...');
-            const session = await this.kiteConnect.generateSession(
+            const account = this.getOrCreateAccount(name);
+            this.logger.log(`Generating access token for ${name}...`);
+            const session = await account.kiteConnect.generateSession(
                 requestToken,
                 apiSecret
             );
 
-            this.accessToken = session.access_token;
-            this.kiteConnect.setAccessToken(this.accessToken);
+            account.accessToken = session.access_token;
+            account.kiteConnect.setAccessToken(account.accessToken);
 
             // Token expires at end of trading day (11:59 PM)
-            this.tokenExpiry = new Date();
-            this.tokenExpiry.setHours(23, 59, 59, 999);
+            account.tokenExpiry = new Date();
+            account.tokenExpiry.setHours(23, 59, 59, 999);
 
-            this.logger.log(`Access token generated successfully. Expires at: ${this.tokenExpiry.toISOString()}`);
+            this.logger.log(`${name} access token generated successfully. Expires at: ${account.tokenExpiry.toISOString()}`);
         } catch (error) {
-            this.logger.error('Failed to generate access token', error);
+            this.logger.error(`Failed to generate access token for ${name}`, error);
             throw new UnauthorizedException('Failed to authenticate with Zerodha');
         }
     }
 
-    isTokenValid(): boolean {
-        const valid = this.accessToken !== null &&
-            this.tokenExpiry !== null &&
-            new Date() < this.tokenExpiry;
+    isTokenValid(accountName?: string): boolean {
+        if (accountName) {
+            const account = this.accounts.get(accountName);
+            return this.isAccountTokenValid(account);
+        }
+        return Array.from(this.accounts.values()).some(account => this.isAccountTokenValid(account));
+    }
 
-        if (!valid && this.accessToken) {
-            this.logger.warn('Token has expired');
+    private isAccountTokenValid(account?: ZerodhaAccount): boolean {
+        const valid = !!account?.accessToken &&
+            !!account?.tokenExpiry &&
+            new Date() < account.tokenExpiry;
+
+        if (!valid && account?.accessToken) {
+            this.logger.warn(`${account.accountName} token has expired`);
         }
 
         return valid;
     }
 
-    clearToken(): void {
-        this.accessToken = null;
-        this.tokenExpiry = null;
-        this.kiteConnect.setAccessToken('');
-        this.logger.log('Token cleared');
+    getAllAccountsStatus(): { accountName: string; isConnected: boolean }[] {
+        return Array.from(this.accounts.values()).map(account => ({
+            accountName: account.accountName,
+            isConnected: this.isAccountTokenValid(account),
+        }));
     }
 
-    async fetchHoldings(): Promise<PortfolioItem[]> {
-        if (!this.isTokenValid()) {
-            this.logger.warn('Attempted to fetch holdings with invalid token');
-            throw new UnauthorizedException('Token expired or not set');
+    clearToken(accountName?: string): void {
+        if (accountName) {
+            const account = this.accounts.get(accountName);
+            if (account) {
+                account.accessToken = null;
+                account.tokenExpiry = null;
+                account.kiteConnect.setAccessToken('');
+                this.logger.log(`${accountName} token cleared`);
+            }
+            return;
+        }
+
+        this.accounts.forEach(account => {
+            account.accessToken = null;
+            account.tokenExpiry = null;
+            account.kiteConnect.setAccessToken('');
+        });
+        this.logger.log('All tokens cleared');
+    }
+
+    async fetchHoldings(accountName: string = 'Self'): Promise<PortfolioItem[]> {
+        if (!this.isTokenValid(accountName)) {
+            this.logger.warn(`Attempted to fetch ${accountName} holdings with invalid token`);
+            throw new UnauthorizedException(`Token expired or not set for ${accountName}`);
+        }
+
+        const account = this.accounts.get(accountName);
+        if (!account) {
+            throw new UnauthorizedException(`No valid token for ${accountName}`);
         }
 
         try {
-            this.logger.log('Fetching holdings from Zerodha...');
-            const holdings = await this.kiteConnect.getHoldings();
+            this.logger.log(`Fetching holdings from Zerodha for ${accountName}...`);
+            const holdings = await account.kiteConnect.getHoldings();
 
-            this.logger.log(`Fetched ${holdings.length} holdings from Zerodha`);
-            return this.mapZerodhaToPortfolio(holdings);
+            this.logger.log(`Fetched ${holdings.length} holdings from Zerodha for ${accountName}`);
+            return this.mapZerodhaToPortfolio(holdings, accountName);
         } catch (error) {
-            this.logger.error('Failed to fetch holdings', error);
+            this.logger.error(`Failed to fetch holdings for ${accountName}`, error);
 
-            if (error.message?.includes('403') || error.message?.includes('401')) {
-                this.clearToken();
-                throw new UnauthorizedException('Session expired. Please reconnect to Zerodha.');
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.includes('403') || message.includes('401')) {
+                this.clearToken(accountName);
+                throw new UnauthorizedException(`Session expired for ${accountName}. Please reconnect to Zerodha.`);
             }
 
-            throw new InternalServerErrorException('Failed to fetch holdings from Zerodha');
+            throw new InternalServerErrorException(`Failed to fetch holdings from Zerodha for ${accountName}`);
         }
     }
 
-    private mapZerodhaToPortfolio(holdings: PortfolioHolding[]): PortfolioItem[] {
+    async fetchAllHoldings(): Promise<PortfolioItem[]> {
+        const allHoldings: PortfolioItem[] = [];
+
+        for (const [accountName] of this.accounts) {
+            if (this.isTokenValid(accountName)) {
+                try {
+                    const holdings = await this.fetchHoldings(accountName);
+                    allHoldings.push(...holdings);
+                } catch (error) {
+                    this.logger.error(`Failed to fetch holdings for ${accountName}, skipping...`, error);
+                }
+            }
+        }
+
+        if (allHoldings.length === 0) {
+            throw new UnauthorizedException('No accounts are connected. Please connect at least one Zerodha account.');
+        }
+
+        return allHoldings;
+    }
+
+    private mapZerodhaToPortfolio(holdings: PortfolioHolding[], accountName: string): PortfolioItem[] {
         return holdings.map(h => {
             const currentValue = h.quantity * h.last_price;
             const instrumentType = this.mapInstrumentType(h.product, h.exchange);
@@ -121,7 +197,7 @@ export class ZerodhaService {
                 currentValue: currentValue,
                 pnl: h.pnl,
                 source: 'Zerodha',
-                owner: 'Self'
+                owner: accountName
             };
         });
     }

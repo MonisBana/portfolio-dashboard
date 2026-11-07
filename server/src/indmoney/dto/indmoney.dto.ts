@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsOptional, IsNumber, IsIn } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsNumber } from 'class-validator';
 
 export class IndMoneyAuthDto {
     @IsNotEmpty()
@@ -6,7 +6,7 @@ export class IndMoneyAuthDto {
     bearerToken: string;
 
     @IsNotEmpty()
-    @IsIn(['Self', 'Wife'])
+    @IsString()
     accountName: string;
 }
 
@@ -18,7 +18,7 @@ export class IndMoneySyncDto {
 
 export class AccountSelectionDto {
     @IsOptional()
-    @IsIn(['Self', 'Wife'])
+    @IsString()
     accountName?: string;
 }
 

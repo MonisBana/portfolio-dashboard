@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsIn } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
 
 export class AuthenticateDto {
     @IsNotEmpty()
@@ -10,7 +10,7 @@ export class AuthenticateDto {
     apiSecret: string;
 
     @IsNotEmpty()
-    @IsIn(['Self', 'Wife'])
+    @IsString()
     accountName: string;
 }
 
@@ -24,14 +24,14 @@ export class TOTPAuthenticateDto {
     totp: string;
 
     @IsNotEmpty()
-    @IsIn(['Self', 'Wife'])
+    @IsString()
     accountName: string;
 }
 
 export class AccountSelectionDto {
-    @IsNotEmpty()
-    @IsIn(['Self', 'Wife'])
-    accountName: string;
+    @IsOptional()
+    @IsString()
+    accountName?: string;
 }
 
 export class AuthSuccessResponseDto {
