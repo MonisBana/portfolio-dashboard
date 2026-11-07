@@ -6,15 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Unplug, CheckCircle2, XCircle, Key } from "lucide-react";
+import { Loader2, RefreshCw, Unplug, CheckCircle2, XCircle, Key, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 interface IndMoneyConnectProps {
     onSyncSuccess?: (holdings: any[], accountName: string) => void;
 }
 
+const DEFAULT_ACCOUNTS: IndMoneyAccountStatus[] = [
+    { accountName: 'Self', isConnected: false },
+    { accountName: 'Wife', isConnected: false },
+];
+
 export function IndMoneyConnect({ onSyncSuccess }: IndMoneyConnectProps) {
-    const [accounts, setAccounts] = useState<IndMoneyAccountStatus[]>([]);
+    const [accounts, setAccounts] = useState<IndMoneyAccountStatus[]>(DEFAULT_ACCOUNTS);
+    const [statusError, setStatusError] = useState<string | null>(null);
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
     const [selectedAccount, setSelectedAccount] = useState<'Self' | 'Wife'>('Self');
     const [bearerToken, setBearerToken] = useState('');
@@ -26,9 +32,14 @@ export function IndMoneyConnect({ onSyncSuccess }: IndMoneyConnectProps) {
     const loadStatus = async () => {
         try {
             const status = await indMoneyClient.getStatus();
-            setAccounts(status.accounts);
-        } catch {
-            setAccounts([]);
+            // Keep the default Self/Wife rows (and Connect buttons) visible even
+            // if the API is unreachable or returns no accounts.
+            setAccounts(status.accounts.length > 0 ? status.accounts : DEFAULT_ACCOUNTS);
+            setStatusError(status.accounts.length > 0 ? null : 'Could not load account status from the portfolio API. Is the server running on port 3001?');
+        } catch (error) {
+            console.error('Failed to load INDMoney status:', error);
+            setAccounts(DEFAULT_ACCOUNTS);
+            setStatusError(error instanceof Error ? error.message : 'Failed to load INDMoney account status');
         }
     };
 
@@ -120,6 +131,13 @@ export function IndMoneyConnect({ onSyncSuccess }: IndMoneyConnectProps) {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {statusError && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>{statusError}</span>
+                        </div>
+                    )}
+
                     {/* Account Status */}
                     <div className="space-y-2">
                         {accounts.map(account => (

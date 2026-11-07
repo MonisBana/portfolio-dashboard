@@ -1,10 +1,9 @@
 import { PortfolioItem } from "../excel-parser";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE, apiFetch } from "./config";
 
 export class VestedClient {
     async authenticate(bearerToken: string, csrfToken?: string, cookie?: string): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/vested/auth`, {
+        const res = await apiFetch(`${API_BASE}/api/vested/auth`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -18,19 +17,15 @@ export class VestedClient {
     }
 
     async getStatus(): Promise<{ isConnected: boolean; tokenExpiresAt?: string }> {
-        try {
-            const res = await fetch(`${API_BASE}/api/vested/status`, {
-                credentials: 'include'
-            });
+        const res = await apiFetch(`${API_BASE}/api/vested/status`, {
+            credentials: 'include'
+        });
 
-            if (!res.ok) {
-                return { isConnected: false };
-            }
-
-            return await res.json();
-        } catch {
+        if (!res.ok) {
             return { isConnected: false };
         }
+
+        return await res.json();
     }
 
     async syncHoldings(conversionRate?: number): Promise<PortfolioItem[]> {
@@ -38,7 +33,7 @@ export class VestedClient {
         if (conversionRate) params.set('conversionRate', conversionRate.toString());
 
         const url = `${API_BASE}/api/vested/holdings${params.toString() ? '?' + params.toString() : ''}`;
-        const res = await fetch(url, {
+        const res = await apiFetch(url, {
             credentials: 'include'
         });
 
@@ -55,7 +50,7 @@ export class VestedClient {
     }
 
     async disconnect(): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/vested/disconnect`, {
+        const res = await apiFetch(`${API_BASE}/api/vested/disconnect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',

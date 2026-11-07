@@ -94,6 +94,7 @@ export default function UploadPage() {
 
     // Zerodha API Sync State
     const [zerodhaConnected, setZerodhaConnected] = useState(false);
+    const [zerodhaStatusError, setZerodhaStatusError] = useState<string | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
     const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
@@ -271,7 +272,7 @@ export default function UploadPage() {
             const loginUrl = await zerodhaClient.getLoginUrl();
             window.location.href = loginUrl;
         } catch (error) {
-            toast.error("Failed to initiate Zerodha connection");
+            toast.error(error instanceof Error ? error.message : "Failed to initiate Zerodha connection");
         }
     };
 
@@ -380,8 +381,14 @@ export default function UploadPage() {
 
     useEffect(() => {
         zerodhaClient.getStatus()
-            .then(status => setZerodhaConnected(status.isConnected))
-            .catch(() => setZerodhaConnected(false));
+            .then(status => {
+                setZerodhaConnected(status.isConnected);
+                setZerodhaStatusError(null);
+            })
+            .catch((error) => {
+                setZerodhaConnected(false);
+                setZerodhaStatusError(error instanceof Error ? error.message : "Failed to reach the Zerodha API");
+            });
 
         const params = new URLSearchParams(window.location.search);
         if (params.get('zerodha_connected') === 'true') {
@@ -560,6 +567,12 @@ export default function UploadPage() {
                     <CardContent className="space-y-4">
                         {!zerodhaConnected ? (
                             <div className="space-y-2">
+                                {zerodhaStatusError && (
+                                    <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">
+                                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                        <span>{zerodhaStatusError}</span>
+                                    </div>
+                                )}
                                 <p className="text-sm text-muted-foreground">
                                     Connect your Zerodha account to enable automatic syncing
                                 </p>

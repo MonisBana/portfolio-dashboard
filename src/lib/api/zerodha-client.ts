@@ -1,10 +1,9 @@
 import { PortfolioItem } from "../excel-parser";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE, apiFetch } from "./config";
 
 export class ZerodhaClient {
     async getLoginUrl(): Promise<string> {
-        const res = await fetch(`${API_BASE}/api/zerodha/login-url`, {
+        const res = await apiFetch(`${API_BASE}/api/zerodha/login-url`, {
             credentials: 'include'
         });
 
@@ -17,7 +16,7 @@ export class ZerodhaClient {
     }
 
     async handleCallback(requestToken: string): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/zerodha/auth/callback`, {
+        const res = await apiFetch(`${API_BASE}/api/zerodha/auth/callback`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -31,23 +30,19 @@ export class ZerodhaClient {
     }
 
     async getStatus(): Promise<{ isConnected: boolean }> {
-        try {
-            const res = await fetch(`${API_BASE}/api/zerodha/status`, {
-                credentials: 'include'
-            });
+        const res = await apiFetch(`${API_BASE}/api/zerodha/status`, {
+            credentials: 'include'
+        });
 
-            if (!res.ok) {
-                return { isConnected: false };
-            }
-
-            return await res.json();
-        } catch (error) {
+        if (!res.ok) {
             return { isConnected: false };
         }
+
+        return await res.json();
     }
 
     async syncHoldings(): Promise<PortfolioItem[]> {
-        const res = await fetch(`${API_BASE}/api/zerodha/holdings`, {
+        const res = await apiFetch(`${API_BASE}/api/zerodha/holdings`, {
             credentials: 'include'
         });
 
@@ -64,7 +59,7 @@ export class ZerodhaClient {
     }
 
     async disconnect(): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/zerodha/disconnect`, {
+        const res = await apiFetch(`${API_BASE}/api/zerodha/disconnect`, {
             method: 'POST',
             credentials: 'include'
         });

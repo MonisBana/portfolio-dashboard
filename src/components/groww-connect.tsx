@@ -7,15 +7,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, Unplug, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, RefreshCw, Unplug, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 interface GrowwConnectProps {
     onSyncSuccess?: () => void;
 }
 
+const DEFAULT_ACCOUNTS: GrowwAccountStatus[] = [
+    { accountName: 'Self', isConnected: false },
+    { accountName: 'Wife', isConnected: false },
+];
+
 export function GrowwConnect({ onSyncSuccess }: GrowwConnectProps) {
-    const [accounts, setAccounts] = useState<GrowwAccountStatus[]>([]);
+    const [accounts, setAccounts] = useState<GrowwAccountStatus[]>(DEFAULT_ACCOUNTS);
+    const [statusError, setStatusError] = useState<string | null>(null);
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
     const [authMethod, setAuthMethod] = useState<'api-key' | 'totp'>('api-key');
     const [selectedAccount, setSelectedAccount] = useState<'Self' | 'Wife'>('Self');
@@ -29,9 +35,15 @@ export function GrowwConnect({ onSyncSuccess }: GrowwConnectProps) {
     const loadStatus = async () => {
         try {
             const status = await growwClient.getStatus();
-            setAccounts(status.accounts);
+            // The API always returns the Self/Wife accounts. An empty list means
+            // the request did not reach the API server, so keep the default rows
+            // visible (with Connect buttons) instead of rendering an empty card.
+            setAccounts(status.accounts.length > 0 ? status.accounts : DEFAULT_ACCOUNTS);
+            setStatusError(status.accounts.length > 0 ? null : 'Could not load account status from the portfolio API. Is the server running on port 3001?');
         } catch (error) {
             console.error('Failed to load Groww status:', error);
+            setAccounts(DEFAULT_ACCOUNTS);
+            setStatusError(error instanceof Error ? error.message : 'Failed to load Groww account status');
         }
     };
 
@@ -126,6 +138,13 @@ export function GrowwConnect({ onSyncSuccess }: GrowwConnectProps) {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {statusError && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>{statusError}</span>
+                        </div>
+                    )}
+
                     {/* Account Status */}
                     <div className="space-y-2">
                         {accounts.map(account => (

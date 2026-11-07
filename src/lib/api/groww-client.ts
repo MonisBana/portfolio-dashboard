@@ -1,6 +1,5 @@
 import { PortfolioItem } from "../excel-parser";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE, apiFetch } from "./config";
 
 export interface GrowwAccountStatus {
     accountName: string;
@@ -16,7 +15,7 @@ export interface GrowwAuthPayload {
 
 export class GrowwClient {
     async authenticateWithApiKey(apiKey: string, apiSecret: string, accountName: 'Self' | 'Wife'): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/groww/auth/api-key`, {
+        const res = await apiFetch(`${API_BASE}/api/groww/auth/api-key`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -30,7 +29,7 @@ export class GrowwClient {
     }
 
     async authenticateWithTOTP(apiKey: string, totp: string, accountName: 'Self' | 'Wife'): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/groww/auth/totp`, {
+        const res = await apiFetch(`${API_BASE}/api/groww/auth/totp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -44,19 +43,15 @@ export class GrowwClient {
     }
 
     async getStatus(): Promise<{ isConnected: boolean; accounts: GrowwAccountStatus[] }> {
-        try {
-            const res = await fetch(`${API_BASE}/api/groww/status`, {
-                credentials: 'include'
-            });
+        const res = await apiFetch(`${API_BASE}/api/groww/status`, {
+            credentials: 'include'
+        });
 
-            if (!res.ok) {
-                return { isConnected: false, accounts: [] };
-            }
-
-            return await res.json();
-        } catch (error) {
+        if (!res.ok) {
             return { isConnected: false, accounts: [] };
         }
+
+        return await res.json();
     }
 
     async syncHoldings(accountName?: 'Self' | 'Wife'): Promise<PortfolioItem[]> {
@@ -64,7 +59,7 @@ export class GrowwClient {
             ? `${API_BASE}/api/groww/holdings?accountName=${accountName}`
             : `${API_BASE}/api/groww/holdings`;
 
-        const res = await fetch(url, {
+        const res = await apiFetch(url, {
             credentials: 'include'
         });
 
@@ -81,7 +76,7 @@ export class GrowwClient {
     }
 
     async disconnect(accountName?: 'Self' | 'Wife'): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/groww/disconnect`, {
+        const res = await apiFetch(`${API_BASE}/api/groww/disconnect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',

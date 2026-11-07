@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Unplug, CheckCircle2, XCircle, Key } from "lucide-react";
+import { Loader2, RefreshCw, Unplug, CheckCircle2, XCircle, Key, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 interface VestedConnectProps {
@@ -16,6 +16,7 @@ interface VestedConnectProps {
 export function VestedConnect({ onSyncSuccess }: VestedConnectProps) {
     const [isConnected, setIsConnected] = useState(false);
     const [tokenExpiresAt, setTokenExpiresAt] = useState<string | undefined>();
+    const [statusError, setStatusError] = useState<string | null>(null);
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
     const [bearerToken, setBearerToken] = useState('');
     const [csrfToken, setCsrfToken] = useState('');
@@ -31,8 +32,11 @@ export function VestedConnect({ onSyncSuccess }: VestedConnectProps) {
             const status = await vestedClient.getStatus();
             setIsConnected(status.isConnected);
             setTokenExpiresAt(status.tokenExpiresAt);
-        } catch {
+            setStatusError(null);
+        } catch (error) {
+            console.error('Failed to load Vested status:', error);
             setIsConnected(false);
+            setStatusError(error instanceof Error ? error.message : 'Failed to load Vested account status');
         }
     };
 
@@ -164,6 +168,13 @@ export function VestedConnect({ onSyncSuccess }: VestedConnectProps) {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {statusError && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>{statusError}</span>
+                        </div>
+                    )}
+
                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                         <div className="flex items-center gap-3">
                             {isConnected ? (

@@ -1,6 +1,5 @@
 import { PortfolioItem } from "../excel-parser";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE, apiFetch } from "./config";
 
 export interface IndMoneyAccountStatus {
     accountName: string;
@@ -10,7 +9,7 @@ export interface IndMoneyAccountStatus {
 
 export class IndMoneyClient {
     async authenticate(bearerToken: string, accountName: 'Self' | 'Wife'): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/indmoney/auth`, {
+        const res = await apiFetch(`${API_BASE}/api/indmoney/auth`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -24,19 +23,15 @@ export class IndMoneyClient {
     }
 
     async getStatus(): Promise<{ isConnected: boolean; accounts: IndMoneyAccountStatus[] }> {
-        try {
-            const res = await fetch(`${API_BASE}/api/indmoney/status`, {
-                credentials: 'include'
-            });
+        const res = await apiFetch(`${API_BASE}/api/indmoney/status`, {
+            credentials: 'include'
+        });
 
-            if (!res.ok) {
-                return { isConnected: false, accounts: [] };
-            }
-
-            return await res.json();
-        } catch {
+        if (!res.ok) {
             return { isConnected: false, accounts: [] };
         }
+
+        return await res.json();
     }
 
     async syncHoldings(accountName?: 'Self' | 'Wife', conversionRate?: number): Promise<PortfolioItem[]> {
@@ -45,7 +40,7 @@ export class IndMoneyClient {
         if (conversionRate) params.set('conversionRate', conversionRate.toString());
 
         const url = `${API_BASE}/api/indmoney/holdings${params.toString() ? '?' + params.toString() : ''}`;
-        const res = await fetch(url, {
+        const res = await apiFetch(url, {
             credentials: 'include'
         });
 
@@ -62,7 +57,7 @@ export class IndMoneyClient {
     }
 
     async disconnect(accountName?: 'Self' | 'Wife'): Promise<void> {
-        const res = await fetch(`${API_BASE}/api/indmoney/disconnect`, {
+        const res = await apiFetch(`${API_BASE}/api/indmoney/disconnect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
