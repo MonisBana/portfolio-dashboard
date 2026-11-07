@@ -44,16 +44,50 @@ interface AddAccountDialogProps {
     onConnected: (broker: Broker, member: string) => void | Promise<void>;
 }
 
+function addHeaderLine(headers: Record<string, string>, line: string) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx <= 0) return;
+    const key = line.substring(0, colonIdx).trim().toLowerCase();
+    const value = line.substring(colonIdx + 1).trim();
+    if (key) headers[key] = value;
+}
+
 function parseHeaders(raw: string): Record<string, string> {
     const headers: Record<string, string> = {};
-    for (const line of raw.split('\n')) {
-        const colonIdx = line.indexOf(':');
-        if (colonIdx === -1) continue;
-        const key = line.substring(0, colonIdx).trim().toLowerCase();
-        const value = line.substring(colonIdx + 1).trim();
-        if (key) headers[key] = value;
+    for (const line of raw.split(/\r?\n/)) {
+        addHeaderLine(headers, line);
     }
     return headers;
+}
+
+function parseCurlHeaders(raw: string): Record<string, string> {
+    const headers: Record<string, string> = {};
+    const headerPattern = /(?:^|\s)(?:-H|--header)(?:\s+|=)\$?(?:'([^']*)'|"((?:[^"\\]|\\.)*)")/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = headerPattern.exec(raw)) !== null) {
+        const headerLine = (match[1] ?? match[2] ?? '').replace(/\\"/g, '"');
+        addHeaderLine(headers, headerLine);
+    }
+
+    return headers;
+}
+
+function parseAuthHeaders(raw: string): Record<string, string> {
+    const trimmed = raw.trim();
+    if (!trimmed) return {};
+
+    const looksLikeCurl = /^curl(?:\.exe)?\b/i.test(trimmed)
+        || /(?:^|\s)(?:-H|--header)(?:\s+|=)['"]/i.test(trimmed);
+
+    if (looksLikeCurl) {
+        const headers = parseCurlHeaders(trimmed);
+        if (Object.keys(headers).length > 0) {
+            return headers;
+        }
+    }
+
+    return parseHeaders(raw);
 }
 
 export function AddAccountDialog({
@@ -161,13 +195,13 @@ export function AddAccountDialog({
             }
 
             if (broker === 'IndMoney') {
-                const headers = parseHeaders(rawHeaders);
+                const headers = parseAuthHeaders(rawHeaders);
                 const token = (headers['authorization'] || (rawHeaders.includes(':') ? '' : rawHeaders))
                     .replace(/^Bearer\s+/i, '')
                     .trim();
 
                 if (!token) {
-                    toast.error('Could not find an Authorization header in the pasted text');
+                    toast.error('Could not find an Authorization header in the pasted headers or cURL');
                     return;
                 }
 
@@ -176,13 +210,13 @@ export function AddAccountDialog({
             }
 
             if (broker === 'Vested') {
-                const headers = parseHeaders(rawHeaders);
+                const headers = parseAuthHeaders(rawHeaders);
                 const token = (headers['authorization'] || (rawHeaders.includes(':') ? '' : rawHeaders))
                     .replace(/^Bearer\s+/i, '')
                     .trim();
 
                 if (!token) {
-                    toast.error('Could not find an Authorization header in the pasted text');
+                    toast.error('Could not find an Authorization header in the pasted headers or cURL');
                     return;
                 }
 
@@ -202,7 +236,7 @@ export function AddAccountDialog({
     };
 
     const authorizationPreview = (() => {
-        const headers = parseHeaders(rawHeaders);
+        const headers = parseAuthHeaders(rawHeaders);
         const rawToken = headers['authorization'] || (rawHeaders.includes(':') ? '' : rawHeaders);
         return rawToken.replace(/^Bearer\s+/i, '').trim();
     })();
@@ -213,7 +247,7 @@ export function AddAccountDialog({
                 <DialogHeader>
                     <DialogTitle>Add Account</DialogTitle>
                     <DialogDescription>
-                        Choose a broker and the family member it belongs to.
+                        Choose a broker and the family member it belongs to. IND Money and Vested accept either request headers or a full cURL command.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -336,10 +370,10 @@ export function AddAccountDialog({
                         {(broker === 'IndMoney' || broker === 'Vested') && (
                             <div className="space-y-4">
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Paste Raw Request Headers</label>
+                                    <label className="text-sm font-medium">Paste Raw Request Headers or cURL</label>
                                     <textarea
-                                        className="flex min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-mono text-xs"
-                                        placeholder={`authorization: Bearer eyJhbGciOi...\nx-csrf-token: ...\ncookie: ...`}
+                                        className="flex min-h-[160px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-mono text-xs"
+                                        placeholder={`authorization: Bearer eyJhbGciOi...\nx-csrf-token: ...\ncookie: ...\n\n— or —\n\ncurl 'https://...' \\\n  -H 'authorization: Bearer eyJhbGciOi...' \\\n  -H 'x-csrf-token: ...' \\\n  -H 'cookie: ...'`}
                                         value={rawHeaders}
                                         onChange={(event) => setRawHeaders(event.target.value)}
                                     />
@@ -353,13 +387,13 @@ export function AddAccountDialog({
                                 )}
 
                                 <div className="space-y-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-                                    <p className="font-medium">How to get the headers:</p>
+                                    <p className="font-medium">How to get the headers or cURL:</p>
                                     <ol className="list-inside list-decimal space-y-1">
                                         <li>Log in to {broker === 'IndMoney' ? 'indmoney.com' : 'app.vestedfinance.com'} as {member}</li>
                                         <li>Open DevTools (F12) → Network tab</li>
                                         <li>{broker === 'IndMoney' ? 'Open US Stocks → Portfolio' : 'Open your Dashboard'}</li>
                                         <li>Find a request to {broker === 'IndMoney' ? 'apixt-us.indmoney.com' : 'dashboard-v3'}</li>
-                                        <li>Right-click → Copy → Copy Request Headers</li>
+                                        <li>Right-click → Copy → <span className="font-medium">Copy Request Headers</span> or <span className="font-medium">Copy as cURL</span></li>
                                         <li>Paste everything above</li>
                                     </ol>
                                 </div>
