@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Pie, PieChart, Cell } from "recharts";
+import { Pie, PieChart, Cell, type PieLabelRenderProps } from "recharts";
 import { mergePortfolioItems } from "@/lib/utils";
 import { PortfolioItem } from "@/lib/excel-parser";
 import * as XLSX from "xlsx";
@@ -132,6 +132,36 @@ function ChartLegendItems({ data }: { data: ChartDatum[] }) {
         </span>
       ))}
     </div>
+  );
+}
+
+function renderPieLabel(props: PieLabelRenderProps) {
+  const { cx, cy, innerRadius, outerRadius, percent } = props;
+  const midAngle = Number(props.midAngle);
+
+  if (!percent || percent < 0.05) return null;
+
+  const radius = Number(innerRadius) + (Number(outerRadius) - Number(innerRadius)) * 0.5;
+  const angle = -midAngle * (Math.PI / 180);
+  const x = Number(cx) + radius * Math.cos(angle);
+  const y = Number(cy) + radius * Math.sin(angle);
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#fff"
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={11}
+      fontWeight={600}
+      stroke="rgba(0,0,0,0.35)"
+      strokeWidth={2}
+      strokeLinejoin="round"
+      paintOrder="stroke"
+    >
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
   );
 }
 
@@ -506,10 +536,12 @@ export function DashboardView({
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
+                      innerRadius={78}
+                      outerRadius={130}
                       strokeWidth={2}
                       stroke="hsl(var(--background))"
+                      label={renderPieLabel}
+                      labelLine={false}
                     >
                       {sectorData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -550,10 +582,12 @@ export function DashboardView({
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
+                      innerRadius={78}
+                      outerRadius={130}
                       strokeWidth={2}
                       stroke="hsl(var(--background))"
+                      label={renderPieLabel}
+                      labelLine={false}
                     >
                       {assetData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -595,10 +629,12 @@ export function DashboardView({
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
+                        innerRadius={78}
+                        outerRadius={130}
                         strokeWidth={2}
                         stroke="hsl(var(--background))"
+                        label={renderPieLabel}
+                        labelLine={false}
                       >
                         {countryData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -640,10 +676,12 @@ export function DashboardView({
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
+                      innerRadius={78}
+                      outerRadius={130}
                       strokeWidth={2}
                       stroke="hsl(var(--background))"
+                      label={renderPieLabel}
+                      labelLine={false}
                     >
                       {brokerData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.fill} />
