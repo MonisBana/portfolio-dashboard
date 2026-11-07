@@ -377,6 +377,9 @@ export function AddAccountDialog({
                                         value={rawHeaders}
                                         onChange={(event) => setRawHeaders(event.target.value)}
                                     />
+                                    <p className="text-xs text-muted-foreground">
+                                        Accepts raw request headers or a full cURL command copied from DevTools.
+                                    </p>
                                 </div>
 
                                 {authorizationPreview && (
