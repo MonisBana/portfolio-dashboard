@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/brand/logo-dark.svg" alt="Portfolio Dashboard" width="260">
+  <img src="public/brand/logo-wordmark.svg" alt="Portfolio Dashboard" width="260">
 </p>
 
 <h1 align="center">Portfolio Dashboard</h1>
