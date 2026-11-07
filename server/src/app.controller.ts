@@ -1,6 +1,5 @@
-import { Controller, Post, Body, Res, Req, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-import { Request, Response } from 'express';
+import { Controller, Post, Body, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { HashbrownGoogle } from '@hashbrownai/google';
 import { HashbrownOllama } from '@hashbrownai/ollama';
 import * as dotenv from 'dotenv';
@@ -8,7 +7,6 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 @Controller('api/chat')
-@UseGuards(AuthGuard('jwt'))
 export class AppController {
     private googleApiKey: string | undefined;
 

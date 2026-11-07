@@ -14,14 +14,11 @@ export default function LandingPage() {
             <span className="font-bold text-xl text-foreground tracking-tight">Portfolio Dashboard</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              Log in
-            </Link>
             <Link
-              href="/signup"
+              href="/dashboard"
               className="text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 px-4 py-2 rounded-full transition-all shadow-sm shadow-primary/20"
             >
-              Sign up
+              Open Dashboard
             </Link>
           </div>
         </div>
@@ -38,17 +35,17 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
             <Link
-              href="/signup"
+              href="/dashboard"
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 text-base font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-full transition-all shadow-lg shadow-primary/20"
             >
-              Get started for free
+              Get started
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
-              href="/login"
+              href="/upload"
               className="w-full sm:w-auto px-8 py-4 text-base font-semibold text-foreground bg-background hover:bg-accent border border-border rounded-full transition-all shadow-sm"
             >
-              View demo
+              Add your portfolio
             </Link>
           </div>
         </div>
@@ -109,10 +106,10 @@ export default function LandingPage() {
           <h2 className="text-4xl font-bold text-foreground tracking-tight">Ready to take control?</h2>
           <p className="text-xl text-muted-foreground">Join thousands of investors tracking their portfolios effortlessly.</p>
           <Link
-            href="/signup"
+            href="/dashboard"
             className="inline-flex items-center justify-center gap-2 px-8 py-4 text-base font-semibold text-primary-foreground bg-primary hover:bg-primary/90 rounded-full transition-all shadow-xl shadow-primary/20"
           >
-            Create your account
+            Open Dashboard
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
