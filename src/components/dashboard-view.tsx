@@ -17,8 +17,6 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart";
 import {
@@ -112,6 +110,29 @@ function buildChartData(map: Map<string, number>): {
   });
 
   return { data, config };
+}
+
+function ChartLegendItems({ data }: { data: ChartDatum[] }) {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+
+  return (
+    <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
+      {data.map((item) => (
+        <span key={item.name} className="inline-flex items-center gap-1.5">
+          <span
+            className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+            style={{ backgroundColor: item.fill }}
+          />
+          <span className="text-muted-foreground">{item.name}</span>
+          {total > 0 && (
+            <span className="text-foreground/50">
+              {((item.value / total) * 100).toFixed(0)}%
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export function DashboardView({
@@ -470,35 +491,34 @@ export function DashboardView({
           </CardHeader>
           <CardContent>
             {sectorData.length > 0 ? (
-              <ChartContainer
-                config={sectorConfig}
-                className="mx-auto aspect-square h-[320px]"
-              >
-                <PieChart>
-                  <ChartTooltip
-                    content={<ChartTooltipContent nameKey="name" />}
-                  />
-                  <Pie
-                    data={sectorData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    strokeWidth={2}
-                    stroke="hsl(var(--background))"
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                  >
-                    {sectorData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <ChartLegend
-                    content={<ChartLegendContent nameKey="name" />}
-                  />
-                </PieChart>
-              </ChartContainer>
+              <>
+                <ChartContainer
+                  config={sectorConfig}
+                  className="mx-auto aspect-square h-[320px]"
+                >
+                  <PieChart>
+                    <ChartTooltip
+                      content={<ChartTooltipContent nameKey="name" />}
+                    />
+                    <Pie
+                      data={sectorData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      strokeWidth={2}
+                      stroke="hsl(var(--background))"
+                    >
+                      {sectorData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ChartContainer>
+                <ChartLegendItems data={sectorData} />
+              </>
             ) : (
               <div className="flex h-[280px] items-center justify-center text-muted-foreground">
                 No sector data
@@ -515,35 +535,34 @@ export function DashboardView({
           </CardHeader>
           <CardContent>
             {assetData.length > 0 ? (
-              <ChartContainer
-                config={assetConfig}
-                className="mx-auto aspect-square h-[320px]"
-              >
-                <PieChart>
-                  <ChartTooltip
-                    content={<ChartTooltipContent nameKey="name" />}
-                  />
-                  <Pie
-                    data={assetData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    strokeWidth={2}
-                    stroke="hsl(var(--background))"
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                  >
-                    {assetData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <ChartLegend
-                    content={<ChartLegendContent nameKey="name" />}
-                  />
-                </PieChart>
-              </ChartContainer>
+              <>
+                <ChartContainer
+                  config={assetConfig}
+                  className="mx-auto aspect-square h-[320px]"
+                >
+                  <PieChart>
+                    <ChartTooltip
+                      content={<ChartTooltipContent nameKey="name" />}
+                    />
+                    <Pie
+                      data={assetData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      strokeWidth={2}
+                      stroke="hsl(var(--background))"
+                    >
+                      {assetData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ChartContainer>
+                <ChartLegendItems data={assetData} />
+              </>
             ) : (
               <div className="flex h-[280px] items-center justify-center text-muted-foreground">
                 No asset data
@@ -561,35 +580,34 @@ export function DashboardView({
             </CardHeader>
             <CardContent>
               {countryData.length > 0 ? (
-                <ChartContainer
-                  config={countryConfig}
-                  className="mx-auto aspect-square h-[320px]"
-                >
-                  <PieChart>
-                    <ChartTooltip
-                      content={<ChartTooltipContent nameKey="name" />}
-                    />
-                    <Pie
-                      data={countryData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      strokeWidth={2}
-                      stroke="hsl(var(--background))"
-                      label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                    >
-                      {countryData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartLegend
-                      content={<ChartLegendContent nameKey="name" />}
-                    />
-                  </PieChart>
-                </ChartContainer>
+                <>
+                  <ChartContainer
+                    config={countryConfig}
+                    className="mx-auto aspect-square h-[320px]"
+                  >
+                    <PieChart>
+                      <ChartTooltip
+                        content={<ChartTooltipContent nameKey="name" />}
+                      />
+                      <Pie
+                        data={countryData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        strokeWidth={2}
+                        stroke="hsl(var(--background))"
+                      >
+                        {countryData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ChartContainer>
+                  <ChartLegendItems data={countryData} />
+                </>
               ) : (
                 <div className="flex h-[280px] items-center justify-center text-muted-foreground">
                   No data available
@@ -607,35 +625,34 @@ export function DashboardView({
           </CardHeader>
           <CardContent>
             {brokerData.length > 0 ? (
-              <ChartContainer
-                config={brokerConfig}
-                className="mx-auto aspect-square h-[320px]"
-              >
-                <PieChart>
-                  <ChartTooltip
-                    content={<ChartTooltipContent nameKey="name" />}
-                  />
-                  <Pie
-                    data={brokerData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    strokeWidth={2}
-                    stroke="hsl(var(--background))"
-                    label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                  >
-                    {brokerData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <ChartLegend
-                    content={<ChartLegendContent nameKey="name" />}
-                  />
-                </PieChart>
-              </ChartContainer>
+              <>
+                <ChartContainer
+                  config={brokerConfig}
+                  className="mx-auto aspect-square h-[320px]"
+                >
+                  <PieChart>
+                    <ChartTooltip
+                      content={<ChartTooltipContent nameKey="name" />}
+                    />
+                    <Pie
+                      data={brokerData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      strokeWidth={2}
+                      stroke="hsl(var(--background))"
+                    >
+                      {brokerData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ChartContainer>
+                <ChartLegendItems data={brokerData} />
+              </>
             ) : (
               <div className="flex h-[280px] items-center justify-center text-muted-foreground">
                 No data available
