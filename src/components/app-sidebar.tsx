@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, UploadCloud, IndianRupee, DollarSign } from "lucide-react";
 
@@ -47,12 +48,23 @@ export function AppSidebar() {
         <Sidebar collapsible="icon">
             <SidebarHeader className="border-b border-sidebar-border">
                 <div className="flex items-center gap-2 px-2 py-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold text-sm">
-                        P
-                    </div>
-                    <span className="text-lg font-semibold group-data-[collapsible=icon]:hidden">
-                        Portfolio
-                    </span>
+                    <Image
+                        src="/brand/icon.svg"
+                        alt="Portfolio Dashboard"
+                        width={32}
+                        height={32}
+                        unoptimized
+                        className="hidden h-8 w-8 rounded-lg group-data-[collapsible=icon]:block"
+                    />
+                    <Image
+                        src="/brand/logo-sidebar.svg"
+                        alt="Portfolio Dashboard"
+                        width={133}
+                        height={32}
+                        unoptimized
+                        className="h-8 w-auto group-data-[collapsible=icon]:hidden"
+                        priority
+                    />
                 </div>
             </SidebarHeader>
             <SidebarContent>

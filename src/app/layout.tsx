@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -16,8 +16,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Portfolio Dashboard",
+  title: {
+    default: "Portfolio Dashboard",
+    template: "%s · Portfolio Dashboard",
+  },
   description: "Track your investments and manage your portfolio",
+  applicationName: "Portfolio Dashboard",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#07130F",
+  colorScheme: "dark light",
 };
 
 export default function RootLayout({
