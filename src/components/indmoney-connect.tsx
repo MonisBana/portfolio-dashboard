@@ -24,6 +24,7 @@ export function IndMoneyConnect({ onSyncSuccess }: IndMoneyConnectProps) {
     const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
     const [selectedAccount, setSelectedAccount] = useState<'Self' | 'Wife'>('Self');
     const [bearerToken, setBearerToken] = useState('');
+    const [rawHeaders, setRawHeaders] = useState('');
     const [conversionRate, setConversionRate] = useState<number>(85);
     const [isAuthenticating, setIsAuthenticating] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -51,9 +52,48 @@ export function IndMoneyConnect({ onSyncSuccess }: IndMoneyConnectProps) {
         if (savedRate) setConversionRate(parseFloat(savedRate));
     }, []);
 
+    const parseRawHeaders = (raw: string) => {
+        const lines = raw.split('\n');
+        let parsedBearer = '';
+
+        for (const line of lines) {
+            const colonIdx = line.indexOf(':');
+            if (colonIdx === -1) continue;
+            const key = line.substring(0, colonIdx).trim().toLowerCase();
+            const value = line.substring(colonIdx + 1).trim();
+
+            if (key === 'authorization') {
+                parsedBearer = value.replace(/^Bearer\s+/i, '');
+            }
+        }
+
+        if (parsedBearer) {
+            setBearerToken(parsedBearer);
+            toast.success('Extracted Authorization token');
+        } else {
+            toast.error('Could not find Authorization header in pasted text');
+        }
+    };
+
+    const handleRawHeadersPaste = (value: string) => {
+        setRawHeaders(value);
+
+        if (value.trim() && !value.includes(':')) {
+            // Allow pasting just the token as a convenience.
+            setBearerToken(value.trim().replace(/^Bearer\s+/i, ''));
+            return;
+        }
+
+        if (value.includes(':')) {
+            parseRawHeaders(value);
+        } else {
+            setBearerToken('');
+        }
+    };
+
     const handleAuthenticate = async () => {
         if (!bearerToken.trim()) {
-            toast.error('Please paste your Bearer token');
+            toast.error('Please paste the request headers or a Bearer token');
             return;
         }
 
@@ -63,6 +103,7 @@ export function IndMoneyConnect({ onSyncSuccess }: IndMoneyConnectProps) {
             toast.success(`${selectedAccount} account connected successfully`);
             setIsAuthDialogOpen(false);
             setBearerToken('');
+            setRawHeaders('');
             await loadStatus();
         } catch (error: any) {
             toast.error(error.message || 'Failed to save token');
@@ -255,31 +296,42 @@ export function IndMoneyConnect({ onSyncSuccess }: IndMoneyConnectProps) {
                     <DialogHeader>
                         <DialogTitle>Connect INDMoney - {selectedAccount}</DialogTitle>
                         <DialogDescription>
-                            Paste the Bearer token from {selectedAccount === 'Self' ? 'your' : "your wife's"} browser session
+                            Paste the raw request headers from {selectedAccount === 'Self' ? 'your' : "your wife's"} browser session — the Authorization token is extracted automatically
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Bearer Token</label>
+                            <label className="text-sm font-medium">Paste Raw Request Headers</label>
                             <textarea
-                                className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-mono text-xs"
-                                placeholder="eyJhbGciOiJIUzI1NiIs..."
-                                value={bearerToken}
-                                onChange={(e) => setBearerToken(e.target.value)}
+                                className="flex min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-mono text-xs"
+                                placeholder={`authorization: Bearer eyJhbGciOi...`}
+                                value={rawHeaders}
+                                onChange={(e) => handleRawHeadersPaste(e.target.value)}
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Right-click the request → Copy → Copy Request Headers
+                            </p>
                         </div>
 
+                        {bearerToken && (
+                            <div className="space-y-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                                <p className="text-xs font-medium text-emerald-600">Extracted token:</p>
+                                <p className="text-xs font-mono truncate">{bearerToken.substring(0, 40)}...</p>
+                            </div>
+                        )}
+
                         <div className="text-xs text-muted-foreground space-y-2 bg-muted/50 p-3 rounded-lg">
-                            <p className="font-medium">How to get the token:</p>
+                            <p className="font-medium">How to get the headers:</p>
                             <ol className="list-decimal list-inside space-y-1">
                                 <li>Login to <span className="font-medium">indmoney.com</span> ({selectedAccount === 'Self' ? 'your account' : "wife's account"})</li>
                                 <li>Open DevTools (F12) → Network tab</li>
                                 <li>Navigate to US Stocks → Portfolio</li>
                                 <li>Find any request to <span className="font-mono">apixt-us.indmoney.com</span></li>
-                                <li>Copy the <span className="font-mono">Authorization</span> header value</li>
+                                <li>Right-click → <span className="font-medium">Copy → Copy Request Headers</span></li>
+                                <li>Paste everything above</li>
                             </ol>
-                            <p className="mt-2 text-yellow-600">Token expires in ~9 hours. You'll need to re-paste after expiry.</p>
+                            <p className="mt-2 text-yellow-600">Token expires in ~9 hours. You&apos;ll need to re-paste after expiry.</p>
                         </div>
                     </div>
 
